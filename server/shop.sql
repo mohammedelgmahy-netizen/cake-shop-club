@@ -1,4 +1,4 @@
--- Cake Shop - Bebrave — «تصفح منتجاتنا»: الأقسام والمنتجات (مرة واحدة، آمن للتكرار)
+-- Cake Shop Dessert Cafe — «تصفح منتجاتنا»: الأقسام والمنتجات (مرة واحدة، آمن للتكرار)
 create extension if not exists pgcrypto;
 
 create table if not exists cakeshop.mc_shop_categories (

@@ -1,5 +1,5 @@
 /**
- * Cake Shop - Bebrave — «تصفح منتجاتنا»: أقسام ومنتجات المحل.
+ * Cake Shop Dessert Cafe — «تصفح منتجاتنا»: أقسام ومنتجات المحل.
  * الجداول: cakeshop.mc_shop_categories و cakeshop.mc_shop_products (server/shop.sql).
  *   fn 'shop'      → للعميل: catalog (الأقسام والمنتجات الظاهرة فقط)، quote (حساب السلة)، saveAddress، checkout، myOrders، cancelOrder
  *   fn 'shopAdmin' → للإدارة (صلاحية «الإعدادات»): list, saveCategory, orderCategories, deleteCategory,

@@ -1,4 +1,4 @@
-/* Cake Shop - Bebrave — لوحة الإدارة: «المنتجات» و«طلبات المنتجات» و«أكواد الخصم» («تصفح منتجاتنا»)
+/* Cake Shop Dessert Cafe — لوحة الإدارة: «المنتجات» و«طلبات المنتجات» و«أكواد الخصم» («تصفح منتجاتنا»)
  * بيستخدم أدوات لوحة الإدارة الموجودة: api, SESSION, esc, $, $all, modal, closeModal, toast, busy, loading, go, money */
 (function () {
   'use strict';

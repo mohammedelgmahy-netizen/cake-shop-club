@@ -2,4 +2,4 @@
 
 Sweet Treats. Sweet Rewards. 🍩
 
-برنامج ولاء العملاء لـ Cake Shop - Bebrave.
+برنامج ولاء العملاء لـ Cake Shop Dessert Cafe.

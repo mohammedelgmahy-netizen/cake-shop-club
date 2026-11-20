@@ -1,4 +1,4 @@
--- Cake Shop - Bebrave — «تصفح منتجاتنا» تحديث 2: كود المنتج + طلبات المنتجات + إصلاح حفظ الصور (آمن للتكرار)
+-- Cake Shop Dessert Cafe — «تصفح منتجاتنا» تحديث 2: كود المنتج + طلبات المنتجات + إصلاح حفظ الصور (آمن للتكرار)
 
 -- إصلاح: الصور/المواصفات/الألوان/الاختيارات اتحفظت كنص JSON جوه jsonb بدل قايمة
 update cakeshop.mc_shop_products set images = (images #>> '{}')::jsonb where jsonb_typeof(images) = 'string';
