@@ -82,6 +82,12 @@
     '.pm-pick label{display:flex;align-items:center;gap:8px;margin:0;padding:6px 0;font-weight:600;font-size:13.5px;cursor:pointer;border-bottom:1px dashed #EEF2FA}',
     '.pm-pick label:last-child{border-bottom:0}.pm-pick input{width:18px;height:18px;margin:0;flex:0 0 auto}',
     '.pm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px}',
+    '.stk{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px}.stk table{width:100%;border-collapse:collapse;font-size:13px}',
+    '.stk th{background:#F8FAFC;color:#937189;font-weight:800;font-size:11.5px;padding:7px 6px;text-align:center}.stk td{padding:6px;border-top:1px solid var(--line);text-align:center}',
+    '.stk td:first-child{text-align:right;font-weight:700}.stk input{width:80px;text-align:center;padding:6px;margin:0}',
+    '.stk .av0{color:#B91C1C;font-weight:800}.stk .avk{color:#166534;font-weight:800}',
+    '.sp-stock{font-size:12px;font-weight:800;border-radius:999px;padding:2px 9px}.sp-stock.ok{background:#DCFCE7;color:#166534}.sp-stock.low{background:#FEF3C7;color:#92400E}.sp-stock.out{background:#FEE2E2;color:#B91C1C}',
+    '.mv-k{font-size:11.5px;font-weight:800;border-radius:6px;padding:1px 7px;background:#F1F5F9;color:#334155}.mv-k.reserve{background:#FEF3C7;color:#92400E}.mv-k.release{background:#E0F2FE;color:#0369A1}.mv-k.deduct{background:#FEE2E2;color:#B91C1C}.mv-k.adjust{background:#DCFCE7;color:#166534}.mv-k.return,.mv-k.unreserve{background:#EDE9FE;color:#6D28D9}',
     '.pm-stats{display:flex;gap:8px;margin-bottom:6px}.pm-stats div{flex:1;background:#F5F3FF;border-radius:12px;padding:8px 10px}.pm-stats small{display:block;color:#937189;font-size:11.5px;font-weight:700}.pm-stats b{font-size:16px}'
   ].join('\n');
   var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
@@ -95,12 +101,35 @@
     });
   }
   function arr(v) { if (Array.isArray(v)) return v; if (typeof v === 'string') { try { var x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch (e) { return []; } } return []; }
-  function fixSD(r) { (r.products || []).forEach(function (p) { ['images', 'specs', 'colors', 'variants'].forEach(function (k) { p[k] = arr(p[k]); }); }); return r; }
+  function fixSD(r) { (r.products || []).forEach(function (p) { ['images', 'specs', 'colors', 'variants', 'stock'].forEach(function (k) { p[k] = arr(p[k]); }); }); return r; }
   function img(src, extra) { return '<img class="ld" src="' + esc(src) + '" alt=""' + (extra || '') + ' onload="this.classList.add(\'ok\')" onerror="__spImgErr(this)">'; }
   window.__spImgErr = function (el) { var f = document.createElement('span'); f.className = 'imgfail'; f.innerHTML = '📷<small>الصورة مش متاحة</small>'; el.replaceWith(f); };
   function catName(id) { var c = SD.categories.filter(function (x) { return x.id === id; })[0]; return c ? c.name : 'بدون قسم'; }
   function pct(price, old) { return old > price && old > 0 ? Math.round((1 - price / old) * 100) : 0; }
   function numVal(el) { var v = String(el.value || '').replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }).replace(/,/g, '').trim(); return v === '' ? 0 : Number(v); }
+
+  /* ---------------- المخزون ---------------- */
+  function skey(c, v) { return String(c || '').trim() + '|' + String(v || '').trim(); }
+  function klabel(k) { var a = String(k).split('|'); return [a[0], a[1]].filter(Boolean).join(' - ') || 'المنتج'; }
+  function stockSum(p) {
+    var t = { physical: 0, reserved: 0, available: 0 };
+    (p.stock || []).forEach(function (s) { t.physical += Number(s.physical); t.reserved += Number(s.reserved); t.available += Math.max(0, Number(s.physical) - Number(s.reserved)); });
+    return t;
+  }
+  var MVK = { adjust: 'تعديل الكمية', reserve: 'حجز لطلب', release: 'فك حجز', deduct: 'خصم نهائي', 'return': 'رجوع للمخزن', unreserve: 'إعادة حجز' };
+  function stockMoves(p, into) {
+    var body = into || modal('📒 سجل حركات المخزون' + (p ? ' — ' + esc(p.name) : ''), '', true);
+    body.innerHTML = '<div id="mvBox"><div class="empty"><span class="spinner"></span></div></div>';
+    sh('stockMoves', { product_id: p ? p.id : '' }).then(function (rows) {
+      $('#mvBox', body).innerHTML = rows.length ? '<div class="stk"><table><tr><th>الوقت</th><th>الصنف</th><th>الحركة</th><th>الفعلي</th><th>المحجوز</th><th>بعدها (فعلي/محجوز)</th><th>بواسطة</th></tr>' + rows.map(function (m) {
+        var sg = function (n) { n = Number(n); return n ? '<b dir="ltr">' + (n > 0 ? '+' : '') + n + '</b>' : '—'; };
+        return '<tr><td style="font-weight:600;font-size:12px">' + esc(new Date(m.created_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })) + '</td>' +
+          '<td>' + esc(m.product_name) + (m.key !== '|' ? '<br><small class="muted">' + esc(klabel(m.key)) + '</small>' : '') + '</td>' +
+          '<td><span class="mv-k ' + esc(m.kind) + '">' + esc(MVK[m.kind] || m.kind) + '</span>' + (m.order_no ? '<br><small>طلب #' + m.order_no + '</small>' : '') + (m.note ? '<br><small class="muted">' + esc(m.note) + '</small>' : '') + '</td>' +
+          '<td>' + sg(m.d_physical) + '</td><td>' + sg(m.d_reserved) + '</td><td dir="ltr">' + m.physical_after + ' / ' + m.reserved_after + '</td><td style="font-size:12px">' + esc(m.by_name || '') + '</td></tr>';
+      }).join('') + '</table></div>' : '<div class="empty">لسه مفيش حركات مخزون</div>';
+    }).catch(function (e) { $('#mvBox', body).innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+  }
 
   window.viewProducts = function (v) {
     sh('list').then(function (r) { SD = fixSD(r); draw(v); }).catch(function (e) { v.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
@@ -120,8 +149,9 @@
   function drawProducts(el) {
     el.innerHTML = '<div class="row" style="flex-wrap:wrap;margin-bottom:10px"><input id="spQ" placeholder="🔍 بحث باسم المنتج أو الكود" value="' + esc(F.q) + '" style="flex:2;min-width:180px">' +
       '<select id="spCat" style="flex:1;min-width:140px"><option value="">كل الأقسام</option>' + SD.categories.map(function (c) { return '<option value="' + esc(c.id) + '"' + (F.cat === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' +
-      '<button class="btn sm" id="spNew" type="button" style="flex:0 0 auto">+ منتج جديد</button></div><div id="spList" class="sp-list"></div>';
+      '<button class="btn sm" id="spNew" type="button" style="flex:0 0 auto">+ منتج جديد</button><button class="btn ghost sm" id="spMoves" type="button" style="flex:0 0 auto">📒 حركات المخزون</button></div><div id="spList" class="sp-list"></div>';
     $('#spNew').onclick = function () { productForm(null); };
+    $('#spMoves').onclick = function () { stockMoves(null); };
     $('#spQ').oninput = function () { F.q = this.value; list(); };
     $('#spCat').onchange = function () { F.cat = this.value; list(); };
     list();
@@ -136,6 +166,7 @@
       return '<div class="sp-item' + (p.hidden ? ' off' : '') + '" data-open="' + esc(p.id) + '"><div class="sp-th">' + (t ? img(t) : '📦') + '</div>' +
         '<div class="sp-info"><b>' + esc(p.name) + '</b><div class="m">' + (p.code ? '<span class="sp-code">' + esc(p.code) + '</span>' : '') + '<span>' + esc(catName(p.category_id)) + '</span><b style="display:inline;color:#1BA8A2">' + money(p.price) + '</b>' +
         (off ? '<s>' + money(p.old_price) + '</s><span class="badge red">-' + off + '%</span>' : '') + (p.hidden ? '<span class="badge gray">مخفي</span>' : '') + '</div>' +
+        (p.track_stock ? (function () { var t = stockSum(p); return '<div class="m" style="margin-top:6px"><span class="sp-stock ' + (t.available <= 0 ? 'out' : t.available <= 3 ? 'low' : 'ok') + '">متاح ' + t.available + '</span><span class="muted small">فعلي ' + t.physical + ' · محجوز ' + t.reserved + '</span></div>'; })() : '') +
         '<div class="m" style="margin-top:6px"><label class="sp-tg"><input type="checkbox" data-av="' + esc(p.id) + '"' + (p.available ? ' checked' : '') + '>متوفر</label>' +
         '<label class="sp-tg"><input type="checkbox" data-vis="' + esc(p.id) + '"' + (p.hidden ? '' : ' checked') + '>ظاهر للعملاء</label></div></div>' +
         '<div class="sp-acts"><button class="btn sm sp-edit" type="button" data-ed="' + esc(p.id) + '">✏️ تعديل</button></div></div>';
@@ -180,6 +211,7 @@
   function productForm(p) {
     var isNew = !p;
     p = p || { name: '', code: '', category_id: F.cat || '', description: '', price: '', old_price: '', available: true, hidden: false, images: [], specs: [], colors: [], variants: [] };
+    var ST = {}; (p.stock || []).forEach(function (s) { ST[s.key] = { physical: Number(s.physical), reserved: Number(s.reserved), orig: Number(s.physical) }; });
     var IM = (p.images || []).slice(), SP = (p.specs || []).map(function (s) { return [s[0], s[1]]; }), CO = (p.colors || []).map(function (c) { return { n: c.n, c: c.c }; });
     var body = modal(isNew ? 'منتج جديد' : 'تعديل المنتج',
       '<label>اسم المنتج *</label><input id="pfName" value="' + esc(p.name) + '" maxlength="150">' +
@@ -195,6 +227,8 @@
       '<label>التفاصيل <span class="muted small">(زي عدد الأفراد، الوزن، المكونات)</span></label><div class="sp-rows" id="pfSpecs"></div><button class="btn ghost sm" type="button" id="pfSpecAdd">+ إضافة تفصيلة</button>' +
       '<label>النكهات المتاحة <span class="muted small">(اختار لون يعبر عن النكهة واكتب اسمها)</span></label><div class="sp-rows" id="pfColors"></div><button class="btn ghost sm" type="button" id="pfColAdd">+ إضافة نكهة</button>' +
       '<label>الأحجام المتاحة <span class="muted small">(مثلاً الحجم: صغير، وسط، كبير — افصل بينهم بفاصلة)</span></label><input id="pfVar" value="' + esc((p.variants || []).join('، ')) + '">' +
+      '<label>المخزون</label><label class="check"><input type="checkbox" id="pfTrack"' + (p.track_stock ? ' checked' : '') + '><span>تتبع الكمية في المخزون <span class="muted small">(الطلب بيحجز الكمية، والإلغاء بيرجعها، والإتمام بيخصمها)</span></span></label>' +
+      '<div id="pfStock"></div>' +
       '<div id="pfErr"></div><div class="row" style="margin-top:14px"><button class="btn" id="pfSave" type="button">حفظ المنتج</button>' +
       (isNew ? '' : '<button class="btn ghost" id="pfDel" type="button" style="flex:0 0 auto;color:#DC2626">مسح</button>') + '</div>', true);
 
@@ -236,8 +270,34 @@
     function drawColors() {
       $('#pfColors').innerHTML = CO.map(function (c, i) { return '<div class="r"><input type="color" value="' + esc(c.c || '#000000') + '" data-cc="' + i + '"><input placeholder="اسم النكهة، مثلاً: شوكولاتة" value="' + esc(c.n) + '" data-cn="' + i + '"><button type="button" class="x" data-cx="' + i + '">×</button></div>'; }).join('');
       $all('[data-cc]', body).forEach(function (x) { x.oninput = function () { CO[+x.dataset.cc].c = x.value; }; });
-      $all('[data-cn]', body).forEach(function (x) { x.oninput = function () { CO[+x.dataset.cn].n = x.value; }; });
+      $all('[data-cn]', body).forEach(function (x) { x.oninput = function () { CO[+x.dataset.cn].n = x.value; }; x.onchange = drawStock; });
       $all('[data-cx]', body).forEach(function (x) { x.onclick = function () { CO.splice(+x.dataset.cx, 1); drawColors(); }; });
+      drawStock();
+    }
+    function curVars() { return $('#pfVar').value.split(/[,،\n]/).map(function (s) { return s.trim(); }).filter(Boolean); }
+    function stockKeys() {
+      var cs = CO.map(function (c) { return String(c.n).trim(); }).filter(Boolean), vs = curVars(), out = [];
+      (cs.length ? cs : ['']).forEach(function (c) { (vs.length ? vs : ['']).forEach(function (v) { out.push(skey(c, v)); }); });
+      return out;
+    }
+    function drawStock() {
+      var box = $('#pfStock'); if (!box) return;
+      if (!$('#pfTrack').checked) { box.innerHTML = ''; return; }
+      var keys = stockKeys();
+      box.innerHTML = '<div class="stk"><table><tr><th>' + (keys.length > 1 ? 'النكهة / الحجم' : 'المنتج') + '</th><th>الكمية الفعلية</th><th>محجوز في طلبات</th><th>المتاح للبيع</th></tr>' + keys.map(function (k) {
+        var s = ST[k] || { physical: 0, reserved: 0 }, av = Math.max(0, Number(s.physical) - Number(s.reserved));
+        return '<tr><td>' + esc(klabel(k)) + '</td><td><input type="number" min="0" step="1" inputmode="numeric" data-sq="' + esc(k) + '" value="' + Number(s.physical) + '"></td>' +
+          '<td>' + Number(s.reserved) + '</td><td class="' + (av > 0 ? 'avk' : 'av0') + '" data-sa="' + esc(k) + '">' + av + '</td></tr>';
+      }).join('') + '</table></div><p class="muted small" style="margin:6px 0 0">المتاح = الفعلي − المحجوز. السلة مش بتحجز حاجة، الحجز بيحصل بس لما العميل يأكد الطلب.</p>' +
+        '<input id="pfStNote" placeholder="سبب تعديل الكمية (اختياري)، مثلاً: جرد / إنتاج جديد" style="margin-top:6px">' +
+        (p.id ? '<button class="btn ghost sm" type="button" id="pfMoves" style="margin-top:6px">📒 سجل حركات المخزون للمنتج ده</button><div id="pfMvBox" style="margin-top:6px"></div>' : '');
+      $all('[data-sq]', box).forEach(function (inp) {
+        inp.oninput = function () {
+          var k = inp.dataset.sq; ST[k] = ST[k] || { physical: 0, reserved: 0, orig: 0 }; ST[k].physical = Math.max(0, Math.floor(numVal(inp)) || 0);
+          var td = box.querySelector('[data-sa="' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + '"]'); if (td) { var av = Math.max(0, ST[k].physical - ST[k].reserved); td.textContent = av; td.className = av > 0 ? 'avk' : 'av0'; }
+        };
+      });
+      var mv = $('#pfMoves'); if (mv) mv.onclick = function () { stockMoves(p, $('#pfMvBox')); };
     }
     function prev() {
       var pr = numVal($('#pfPrice')), old = numVal($('#pfOld')), k = pct(pr, old);
@@ -253,6 +313,7 @@
     };
     $('#pfPct').value = pct(Number(p.price), Number(p.old_price)) || '';
     prev(); drawImgs(); drawSpecs(); drawColors();
+    $('#pfTrack').onchange = drawStock; $('#pfVar').onchange = drawStock;
     $('#pfSpecAdd').onclick = function () { SP.push(['', '']); drawSpecs(); var a = $all('[data-sk]', body); a[a.length - 1].focus(); };
     $('#pfColAdd').onclick = function () { CO.push({ n: '', c: '#000000' }); drawColors(); var a = $all('[data-cn]', body); a[a.length - 1].focus(); };
     $('#pfSave').onclick = function () {
@@ -261,7 +322,10 @@
         id: p.id || '', name: $('#pfName').value, code: $('#pfCode').value, category_id: $('#pfCat').value, description: $('#pfDesc').value,
         price: numVal($('#pfPrice')), old_price: numVal($('#pfOld')), available: $('#pfAv').checked, hidden: !$('#pfVis').checked,
         images: IM, specs: SP.filter(function (s) { return String(s[0]).trim() || String(s[1]).trim(); }), colors: CO.filter(function (c) { return String(c.n).trim(); }),
-        variants: $('#pfVar').value.split(/[,،\n]/).map(function (s) { return s.trim(); }).filter(Boolean)
+        variants: $('#pfVar').value.split(/[,،\n]/).map(function (s) { return s.trim(); }).filter(Boolean),
+        track_stock: $('#pfTrack').checked,
+        stock: $('#pfTrack').checked ? stockKeys().map(function (k) { return { key: k, physical: ST[k] ? ST[k].physical : 0 }; }) : [],
+        stock_note: $('#pfStNote') ? $('#pfStNote').value : ''
       };
       if (!String(payload.name).trim()) { $('#pfErr').innerHTML = '<div class="err">اكتب اسم المنتج</div>'; return; }
       if (!$('#pfPrice').value.trim() || isNaN(payload.price)) { $('#pfErr').innerHTML = '<div class="err">اكتب سعر البيع</div>'; return; }
@@ -396,6 +460,7 @@
         ' · الإجمالي <b>' + money(o.total) + '</b>' + (o.promo_code ? ' <span class="so-promo">🏷️ ' + esc(o.promo_code) + '</span>' : '') + '</div>' +
         '<div class="ln" style="font-weight:700">' + (o.delivery === 'delivery' ? '🚚 توصيل (Delivery) · ' + esc(o.address || '—') + ' · رسوم التوصيل ' + money(o.shipping)
           : '🏪 استلام من الفرع (Branch Pickup)' + (o.branch_name ? ' · ' + esc(o.branch_name) : '')) + '</div>' +
+        (o.stock_state && o.stock_state !== 'none' ? '<div class="ln" style="font-size:12.5px">📦 المخزون: ' + ({ reserved: 'محجوز للطلب', released: 'اتفك الحجز ورجع للمتاح', deducted: 'اتخصم من المخزون' }[o.stock_state] || '') + '</div>' : '') +
         '<div class="ln mu">' + esc(odt(o.created_at)) + (o.notes ? ' · 📝 ' + esc(o.notes.length > 50 ? o.notes.slice(0, 50) + '…' : o.notes) : '') + '</div></div></div>';
     }).join('');
     $all('[data-oid]', box).forEach(function (el) { el.onclick = function () { orderDetails(el.dataset.oid); }; });
@@ -424,12 +489,26 @@
       r('الإجمالي النهائي', '<b>' + money(o.total) + '</b>') + r('ملاحظات العميل', o.notes ? esc(o.notes) : '—') + '</div>' +
       '<div class="so-acts"><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(waNum(o.customer_phone)) + '?text=' + encodeURIComponent(msg) + '" style="background:#25D366;color:#062612">💬 واتساب العميل</a>' +
       '<a class="btn ghost" href="tel:' + esc(o.customer_phone) + '">📞 اتصال</a></div>' +
+      (o.stock_state && o.stock_state !== 'none' ? '<div class="so-det">' + r('📦 المخزون', { reserved: 'الكمية محجوزة للطلب', released: 'الحجز اتفك ورجع للمتاح', deducted: 'اتخصم نهائي من المخزون' }[o.stock_state] || '') + '</div>' : '') +
+      // فاتورة المحل للطلب: رقمها ON-<رقم الطلب> علشان الطلب ميتعدش مرتين في ملخص العميل، والعميل ياخد نقاطه
+      '<h3 style="margin:16px 0 4px">🧾 فاتورة الطلب ونقاط العميل</h3>' + (o.invoice_no
+        ? '<div class="so-det">' + r('رقم الفاتورة', '<b>' + esc(o.invoice_no) + '</b> ✓') + '</div>'
+        : o.status === 'completed'
+          ? '<p class="muted small" style="margin:0 0 6px">سجّل الطلب كفاتورة في برنامج الولاء علشان العميل ياخد نقاطه. رقم الفاتورة هيبقى <b>ON-' + o.order_no + '</b> ومش هيتحسب طلب جديد.</p><div id="soInvErr"></div><button type="button" class="btn sm" id="soInv">🧾 سجّل فاتورة الطلب (' + money(Number(o.total) - Number(o.shipping || 0)) + ')</button>'
+          : '<p class="muted small" style="margin:0">زرار تسجيل الفاتورة بيظهر لما الطلب يبقى «تم إتمام الطلب».</p>') +
       '<h3 style="margin:16px 0 4px">ملاحظات داخلية <small style="color:#937189;font-weight:600">(مش بتظهر للعميل)</small></h3><textarea id="soNotes" rows="2" maxlength="1000">' + esc(o.admin_notes || '') + '</textarea>' +
       '<div style="height:6px"></div><button type="button" class="btn ghost sm" id="soNotesOk">حفظ الملاحظات</button>' +
       '<h3 style="margin:16px 0 4px">تغيير حالة الطلب</h3><div class="so-sts">' + ST_ORDER.map(function (s) { return '<button type="button" data-s="' + s + '"' + (o.status === s ? ' class="on" disabled' : '') + '>' + ST_AR[s] + '</button>'; }).join('') + '</div>' +
       '<div id="soRej" class="hidden"><label id="soRejL">سبب الرفض (هيظهر للعميل) *</label><input id="soReason" maxlength="300" placeholder="مثلاً: المنتج خلص من المخزن"><div style="height:8px"></div><button type="button" class="btn" id="soRejOk" style="background:#DC2626">تأكيد الرفض</button></div>' +
       '<div id="soErr"></div>' +
       '<h3 style="margin:16px 0 4px">سجل الطلب</h3><ul class="so-hist">' + (o.history || []).map(function (h) { return '<li>' + esc(ST_AR[h.s] || h.s) + ' <small>' + esc(odt(h.at)) + (h.by && h.by !== 'customer' ? ' · ' + esc(h.by) : h.by === 'customer' ? ' · العميل' : '') + '</small></li>'; }).join('') + '</ul>', true);
+    var ib = $('#soInv');
+    if (ib) ib.onclick = function () {
+      busy(ib, true); $('#soInvErr').innerHTML = '';
+      call('checkout', { customer_id: o.customer_id, invoice_no: 'ON-' + o.order_no, amount: Math.round((Number(o.total) - Number(o.shipping || 0)) * 100) / 100, category: '' }, true)
+        .then(function (res) { o.invoice_no = 'ON-' + o.order_no; toast('تم تسجيل الفاتورة ✓' + (res && res.points_earned ? ' · +' + res.points_earned + ' نقطة' : '')); orderDetails(o.id); })
+        .catch(function (e) { $('#soInvErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; busy(ib, false); });
+    };
     $('#soNotesOk').onclick = function () {
       var btn = this; busy(btn, true);
       sh('saveOrderNotes', { id: o.id, notes: $('#soNotes').value }).then(function () { o.admin_notes = $('#soNotes').value; toast('تم حفظ الملاحظات ✓'); })

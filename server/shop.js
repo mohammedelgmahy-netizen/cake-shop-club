@@ -57,14 +57,34 @@ function cleanProduct(p) {
   };
 }
 
-const PRODUCT_COLS = 'id, code, category_id, name, description, price, old_price, available, hidden, images, specs, colors, variants, created_at, updated_at';
+// كميات المخزون الجاية من فورم المنتج: لكل اختيار (النكهة|الحجم) الموجود فعلاً في المنتج
+function cleanStock(list, v) {
+  const colors = v.colors.map((c) => c.n), variants = v.variants;
+  const valid = new Set();
+  (colors.length ? colors : ['']).forEach((c) => (variants.length ? variants : ['']).forEach((x) => valid.add(stockKey(c, x))));
+  const out = [];
+  for (const it of (Array.isArray(list) ? list : []).slice(0, 1000)) {
+    const key = String(it && it.key || '');
+    if (!valid.has(key)) continue;
+    const n = Number(it.physical);
+    if (!Number.isInteger(n) || n < 0 || n > 1000000) throw new Error('الكمية لازم تكون رقم صحيح 0 أو أكتر');
+    out.push({ key, physical: n });
+  }
+  return out;
+}
+
+const PRODUCT_COLS = 'id, code, category_id, name, description, price, old_price, available, hidden, images, specs, colors, variants, created_at, updated_at, track_stock';
+// المتاح لكل اختيار (النكهة|الحجم) للمنتجات اللي عليها تتبع مخزون: المتاح = الفعلي − المحجوز
+const STOCK_AVAIL = `case when p.track_stock then (select coalesce(json_object_agg(s.key, greatest(s.physical - s.reserved, 0)), '{}'::json) from cakeshop.mc_shop_stock s where s.product_id = p.id) end as stock`;
+const STOCK_FULL = `(select coalesce(json_agg(json_build_object('key', s.key, 'physical', s.physical, 'reserved', s.reserved, 'available', greatest(s.physical - s.reserved, 0)) order by s.key), '[]'::json) from cakeshop.mc_shop_stock s where s.product_id = p.id) as stock`;
+export const stockKey = (color, variant) => T(color) + '|' + T(variant);
 const CATEGORY_COLS = 'id, name, icon, image, sort, hidden';
 
 async function catalog(sql) {
   const [r] = await sql.unsafe(`select json_build_object(
     'categories', (select coalesce(json_agg(c order by c.sort, c.created_at), '[]') from (select ${CATEGORY_COLS}, created_at from cakeshop.mc_shop_categories where not hidden) c),
     'products', (select coalesce(json_agg(p order by p.created_at desc), '[]') from (
-      select ${PRODUCT_COLS} from cakeshop.mc_shop_products p
+      select ${PRODUCT_COLS}, ${STOCK_AVAIL} from cakeshop.mc_shop_products p
       where not p.hidden and (p.category_id is null or p.category_id in (select id from cakeshop.mc_shop_categories where not hidden))) p)
   ) as data`);
   return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
@@ -77,7 +97,7 @@ async function catalog(sql) {
 export const ORDER_STATUS = ['pending', 'approved', 'preparing', 'ready', 'shipped', 'completed', 'rejected', 'cancelled'];
 const ORDER_COLS = `o.id, o.order_no, o.customer_id, o.customer_name, o.customer_phone, o.member_no, o.product_id, o.product_name, o.product_code,
   o.color, o.variant, o.qty, o.unit_price, o.total, o.notes, o.status, o.reject_reason, o.history, o.created_at, o.updated_at,
-  o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name`;
+  o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name, o.stock_state`;
 const money2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 const PROMO_CODE = /^[A-Za-z0-9_-]{3,30}$/;
 
@@ -140,7 +160,7 @@ const dateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : d ? S
 async function quote(q, customer, p, lockPromo) {
   const items = cleanItems(p.items);
   const ids = [...new Set(items.map((i) => i.product_id))];
-  const prods = await q.unsafe(`select p.id, p.name, p.code, p.price, p.old_price, p.available, p.hidden, p.colors, p.variants, p.category_id,
+  const prods = await q.unsafe(`select p.id, p.name, p.code, p.price, p.old_price, p.available, p.hidden, p.colors, p.variants, p.category_id, p.track_stock, ${STOCK_AVAIL},
       coalesce(p.images->0->>'t', p.images->0->>'u', '') as image,
       (p.category_id is null or exists (select 1 from cakeshop.mc_shop_categories k where k.id = p.category_id and not k.hidden)) as cat_ok
     from cakeshop.mc_shop_products p where p.id = any($1::uuid[])`, [ids]);
@@ -157,6 +177,13 @@ async function quote(q, customer, p, lockPromo) {
     if (!line.error && !colors.length && it.color) line.error = 'النكهة دي مبقتش متاحة';
     if (!line.error && variants.length && variants.indexOf(it.variant) < 0) line.error = 'اختار الحجم';
     if (!line.error && !variants.length && it.variant) line.error = 'الحجم ده مبقاش متاح';
+    if (!line.error && pr.track_stock) { // فحص مبدئي للعرض بس، والحجز الفعلي بيتم في قاعدة البيانات وقت تأكيد الطلب
+      const st = pr.stock && typeof pr.stock === 'object' ? pr.stock : {};
+      const av = Number(st[stockKey(it.color, it.variant)] || 0);
+      line.stock_available = av;
+      if (av <= 0) line.error = 'خلصت الكمية';
+      else if (it.qty > av) line.error = 'الكمية المتاحة ' + av + ' بس';
+    }
     const price = Number(pr.price), old = Number(pr.old_price) > price ? Number(pr.old_price) : 0;
     line.unit_price = price; line.old_price = old;
     line.line_total = money2(price * it.qty);
@@ -224,6 +251,7 @@ async function checkout(sql, c, p) {
   const address = T(p.address).slice(0, 500);
   const notes = T(p.notes).slice(0, 500);
   return sql.begin(async (tx) => {
+    await tx.unsafe("select set_config('cakeshop.actor', $1, true)", ['العميل: ' + c.name]);
     const [cnt] = await tx.unsafe("select count(*)::int n from cakeshop.mc_shop_orders where customer_id = $1 and created_at > now() - interval '1 day'", [c.customer_id]);
     if (cnt.n >= 20) throw new Error('وصلت للحد الأقصى للطلبات النهارده. كلم المحل لو محتاج حاجة.');
     const qt = await quote(tx, c, p, true);
@@ -276,6 +304,7 @@ async function customerShop(sql, action, p) {
     return withImages(sql, rows);
   }
   if (action === 'quote') return quote(sql, c, p, false);
+  if (action === 'mySummary') return customerSummary(sql, c);
   if (action === 'saveAddress') { // عنوان التوصيل المحفوظ في حساب العميل
     const a = T(p.address).slice(0, 500);
     if (a.length < 5) throw new Error('اكتب العنوان بالتفصيل');
@@ -289,14 +318,55 @@ async function customerShop(sql, action, p) {
   }
   if (action === 'cancelOrder') {
     if (!UUID.test(T(p.id))) throw new Error('الطلب غير موجود');
-    const r = await sql.unsafe(`update cakeshop.mc_shop_orders set status = 'cancelled', updated_at = now(),
+    const r = await sql.begin(async (tx) => {
+      await tx.unsafe("select set_config('cakeshop.actor', $1, true)", ['العميل: ' + c.name]);
+      return tx.unsafe(`update cakeshop.mc_shop_orders set status = 'cancelled', updated_at = now(),
         history = history || $3::text::jsonb
       where id = $1 and customer_id = $2 and status = 'pending' returning id`,
       [T(p.id), c.customer_id, JSON.stringify([{ s: 'cancelled', at: new Date().toISOString(), by: 'customer' }])]);
+    });
     if (!r.length) throw new Error('الطلب ده مينفعش يتلغي، المحل بدأ فيه بالفعل. كلم المحل.');
     return { done: true };
   }
   throw new Error('طلب غير معروف');
+}
+
+/* ---------------- ملخص طلبات العميل (أونلاين + المحل) ----------------
+ * الطلبات الأونلاين مربوطة بالعميل بـ customer_id بتاعه. فاتورة المحل اللي اتسجلت لطلب أونلاين رقمها ON-<رقم الطلب>
+ * وبتتحسب مع الطلب نفسه مش كطلب جديد، فالطلب ميتعدش مرتين. */
+export const invoiceForOrder = (orderNo) => 'ON-' + orderNo;
+async function customerSummary(sql, c) {
+  const [r] = await sql.unsafe(`with o as (
+      select id, order_no, status, total, shipping, delivery, branch_name, created_at, items, product_name, qty
+      from cakeshop.mc_shop_orders where customer_id = $1),
+    t as (
+      select txn_id, invoice_no, net_amount, amount, points_earned, created_at,
+        exists (select 1 from o where 'ON-' || o.order_no = t0.invoice_no) as linked
+      from cakeshop.mc_transactions t0 where customer_id = $1 and status <> 'void')
+    select json_build_object(
+      'online_total', (select count(*) from o),
+      'online_active', (select count(*) from o where status in ('pending','approved','preparing','ready','shipped')),
+      'online_completed', (select count(*) from o where status = 'completed'),
+      'online_cancelled', (select count(*) from o where status in ('cancelled','rejected')),
+      'online_value', (select coalesce(sum(total), 0) from o where status = 'completed'),
+      'store_count', (select count(*) from t where not linked),
+      'store_value', (select coalesce(sum(net_amount), 0) from t where not linked),
+      'store', (select coalesce(json_agg(json_build_object('invoice_no', invoice_no, 'amount', net_amount, 'points', points_earned, 'created_at', created_at) order by created_at desc), '[]') from (select * from t where not linked order by created_at desc limit 100) x),
+      'invoices', (select coalesce(json_object_agg(invoice_no, true), '{}') from t where linked)
+    ) as data`, [c.customer_id]);
+  const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  const n = (k) => Number(d[k] || 0);
+  return {
+    // إجمالي الطلبات = كل الطلبات الأونلاين (الملغية والمرفوضة بتظهر في السجل بس مش في الإجمالي) + مشتريات المحل اللي مش مربوطة بطلب أونلاين
+    total_orders: n('online_total') - n('online_cancelled') + n('store_count'),
+    active_orders: n('online_active'),
+    completed_orders: n('online_completed') + n('store_count'),
+    cancelled_orders: n('online_cancelled'),
+    total_value: money2(n('online_value') + n('store_value')),
+    online_orders: n('online_total'), store_orders: n('store_count'),
+    store: (d.store || []).map((x) => ({ invoice_no: x.invoice_no, amount: Number(x.amount), points: Number(x.points), created_at: x.created_at })),
+    invoices: d.invoices || {},
+  };
 }
 
 function publicOrder(o, imgs) {
@@ -352,7 +422,7 @@ export async function handleShop(body, ctx) {
   try {
     if (fn === 'shop') {
       if (args[0] === 'catalog') return ok(await catalog(sql));
-      if (['order', 'quote', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}));
+      if (['order', 'quote', 'mySummary', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}));
       return bad('طلب غير معروف');
     }
     // ---------- الإدارة ----------
@@ -365,18 +435,20 @@ export async function handleShop(body, ctx) {
     if (action === 'list') {
       const [r] = await sql.unsafe(`select json_build_object(
         'categories', (select coalesce(json_agg(c order by c.sort, c.created_at), '[]') from cakeshop.mc_shop_categories c),
-        'products', (select coalesce(json_agg(p order by p.created_at desc), '[]') from (select ${PRODUCT_COLS} from cakeshop.mc_shop_products) p)
+        'products', (select coalesce(json_agg(p order by p.created_at desc), '[]') from (select ${PRODUCT_COLS}, ${STOCK_FULL} from cakeshop.mc_shop_products p) p)
       ) as data`);
       return ok(typeof r.data === 'string' ? JSON.parse(r.data) : r.data);
     }
 
 
     if (action === 'orders') {
-      const rows = await sql.unsafe(`select ${ORDER_COLS} from cakeshop.mc_shop_orders o order by o.created_at desc limit 2000`);
+      const rows = await sql.unsafe(`select ${ORDER_COLS},
+          (select t.invoice_no from cakeshop.mc_transactions t where t.customer_id = o.customer_id and t.invoice_no = 'ON-' || o.order_no and t.status <> 'void' limit 1) as invoice_no
+        from cakeshop.mc_shop_orders o order by o.created_at desc limit 2000`);
       const list = await withImages(sql, rows);
       return ok(list.map((o, i) => Object.assign(o, {
         customer_id: rows[i].customer_id, customer_name: rows[i].customer_name, customer_phone: rows[i].customer_phone, member_no: rows[i].member_no,
-        admin_notes: rows[i].admin_notes || '', history: Array.isArray(rows[i].history) ? rows[i].history : [],
+        admin_notes: rows[i].admin_notes || '', invoice_no: rows[i].invoice_no || '', stock_state: rows[i].stock_state || 'none', history: Array.isArray(rows[i].history) ? rows[i].history : [],
       })));
     }
 
@@ -387,9 +459,13 @@ export async function handleShop(body, ctx) {
       const reason = T(p.reason).slice(0, 300);
       if (st === 'rejected' && !reason) return bad('اكتب سبب الرفض علشان يظهر للعميل');
       const h = JSON.stringify([{ s: st, at: new Date().toISOString(), by: user.name || '' }]);
-      const r = await sql.unsafe(`update cakeshop.mc_shop_orders set status = $2,
+      // تغيير الحالة بيحجز/يفك/يخصم المخزون تلقائياً من قاعدة البيانات (Trigger) في نفس العملية
+      const r = await sql.begin(async (tx) => {
+        await tx.unsafe("select set_config('cakeshop.actor', $1, true)", [user.name || 'الإدارة']);
+        return tx.unsafe(`update cakeshop.mc_shop_orders set status = $2,
           reject_reason = case when $2 in ('rejected','cancelled') then $3 else reject_reason end,
           updated_at = now(), history = history || $4::text::jsonb where id = $1 and status <> $2 returning id`, [T(p.id), st, reason, h]);
+      });
       if (!r.length) {
         const e = await sql.unsafe('select 1 from cakeshop.mc_shop_orders where id = $1', [T(p.id)]);
         return e.length ? bad('الطلب بالفعل في الحالة دي') : bad('الطلب غير موجود');
@@ -497,17 +573,35 @@ export async function handleShop(body, ctx) {
       }
       const vals = [v.name, v.category_id, v.description, v.price, v.old_price, v.available, v.hidden,
         JSON.stringify(v.images), JSON.stringify(v.specs), JSON.stringify(v.colors), JSON.stringify(v.variants)];
-      if (p.id) {
-        if (!UUID.test(T(p.id))) return bad('المنتج غير موجود');
-        const r = await sql.unsafe(`update cakeshop.mc_shop_products set name=$1, category_id=$2, description=$3, price=$4, old_price=$5,
-          available=$6, hidden=$7, images=$8::text::jsonb, specs=$9::text::jsonb, colors=$10::text::jsonb, variants=$11::text::jsonb, code=$12, updated_at=now()
-          where id=$13 returning id`, [...vals, v.code, T(p.id)]);
-        if (!r.length) return bad('المنتج غير موجود');
-        return ok({ id: r[0].id });
-      }
-      const r = await sql.unsafe(`insert into cakeshop.mc_shop_products (name, category_id, description, price, old_price, available, hidden, images, specs, colors, variants, code)
-        values ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb,$10::text::jsonb,$11::text::jsonb,$12) returning id`, [...vals, v.code]);
-      return ok({ id: r[0].id });
+      const track = !!p.track_stock;
+      const levels = cleanStock(p.stock, v);
+      if (p.id && !UUID.test(T(p.id))) return bad('المنتج غير موجود');
+      const id = await sql.begin(async (tx) => {
+        let r;
+        if (p.id) {
+          r = await tx.unsafe(`update cakeshop.mc_shop_products set name=$1, category_id=$2, description=$3, price=$4, old_price=$5,
+            available=$6, hidden=$7, images=$8::text::jsonb, specs=$9::text::jsonb, colors=$10::text::jsonb, variants=$11::text::jsonb, code=$12, track_stock=$13, updated_at=now()
+            where id=$14 returning id`, [...vals, v.code, track, T(p.id)]);
+          if (!r.length) throw new Error('المنتج غير موجود');
+        } else {
+          r = await tx.unsafe(`insert into cakeshop.mc_shop_products (name, category_id, description, price, old_price, available, hidden, images, specs, colors, variants, code, track_stock)
+            values ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb,$10::text::jsonb,$11::text::jsonb,$12,$13) returning id`, [...vals, v.code, track]);
+        }
+        // الكميات الفعلية (جرد/إضافة بضاعة): كل تغيير بيتسجل في سجل حركات المخزون
+        if (track) for (const l of levels) {
+          await tx.unsafe('select cakeshop.stock_set_physical($1::uuid, $2, $3::int, $4, $5)', [r[0].id, l.key, l.physical, user.name || 'الإدارة', T(p.stock_note).slice(0, 200)]);
+        }
+        return r[0].id;
+      });
+      return ok({ id });
+    }
+
+    if (action === 'stockMoves') { // سجل حركات المخزون (لمنتج واحد أو للكل)
+      const pid = T(p.product_id);
+      if (pid && !UUID.test(pid)) return bad('المنتج غير موجود');
+      const rows = await sql.unsafe(`select id, product_id, product_name, key, kind, d_physical, d_reserved, physical_after, reserved_after, order_no, note, by_name, created_at
+        from cakeshop.mc_shop_stock_moves where ($1 = '' or product_id::text = $1) order by id desc limit 500`, [pid]);
+      return ok(rows.map((m) => Object.assign({}, m, { id: Number(m.id), order_no: m.order_no ? Number(m.order_no) : null })));
     }
 
     if (action === 'setProduct') {
