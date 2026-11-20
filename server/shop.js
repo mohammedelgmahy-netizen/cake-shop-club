@@ -153,10 +153,10 @@ async function quote(q, customer, p, lockPromo) {
     if (!pr.available) line.error = 'غير متوفر حالياً';
     const colors = (Array.isArray(pr.colors) ? pr.colors : []).map((x) => x && x.n);
     const variants = Array.isArray(pr.variants) ? pr.variants : [];
-    if (!line.error && colors.length && colors.indexOf(it.color) < 0) line.error = 'اختار اللون';
-    if (!line.error && !colors.length && it.color) line.error = 'اللون ده مبقاش متاح';
-    if (!line.error && variants.length && variants.indexOf(it.variant) < 0) line.error = 'اختار النوع';
-    if (!line.error && !variants.length && it.variant) line.error = 'النوع ده مبقاش متاح';
+    if (!line.error && colors.length && colors.indexOf(it.color) < 0) line.error = 'اختار النكهة';
+    if (!line.error && !colors.length && it.color) line.error = 'النكهة دي مبقتش متاحة';
+    if (!line.error && variants.length && variants.indexOf(it.variant) < 0) line.error = 'اختار الحجم';
+    if (!line.error && !variants.length && it.variant) line.error = 'الحجم ده مبقاش متاح';
     const price = Number(pr.price), old = Number(pr.old_price) > price ? Number(pr.old_price) : 0;
     line.unit_price = price; line.old_price = old;
     line.line_total = money2(price * it.qty);

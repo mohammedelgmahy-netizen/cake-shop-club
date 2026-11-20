@@ -192,9 +192,9 @@
       '<label class="check"><input type="checkbox" id="pfAv"' + (p.available ? ' checked' : '') + '><span>متوفر في المحل</span></label>' +
       '<label class="check" style="margin-top:-6px"><input type="checkbox" id="pfVis"' + (p.hidden ? '' : ' checked') + '><span>ظاهر للعملاء في «تصفح منتجاتنا»</span></label>' +
       '<label>الوصف</label><textarea id="pfDesc" rows="5" placeholder="وصف كامل للمنتج">' + esc(p.description) + '</textarea>' +
-      '<label>المواصفات</label><div class="sp-rows" id="pfSpecs"></div><button class="btn ghost sm" type="button" id="pfSpecAdd">+ إضافة مواصفة</button>' +
-      '<label>الألوان المتاحة</label><div class="sp-rows" id="pfColors"></div><button class="btn ghost sm" type="button" id="pfColAdd">+ إضافة لون</button>' +
-      '<label>اختيارات تانية <span class="muted small">(مثلاً الحجم: صغير، وسط، كبير — افصل بينهم بفاصلة)</span></label><input id="pfVar" value="' + esc((p.variants || []).join('، ')) + '">' +
+      '<label>التفاصيل <span class="muted small">(زي عدد الأفراد، الوزن، المكونات)</span></label><div class="sp-rows" id="pfSpecs"></div><button class="btn ghost sm" type="button" id="pfSpecAdd">+ إضافة تفصيلة</button>' +
+      '<label>النكهات المتاحة <span class="muted small">(اختار لون يعبر عن النكهة واكتب اسمها)</span></label><div class="sp-rows" id="pfColors"></div><button class="btn ghost sm" type="button" id="pfColAdd">+ إضافة نكهة</button>' +
+      '<label>الأحجام المتاحة <span class="muted small">(مثلاً الحجم: صغير، وسط، كبير — افصل بينهم بفاصلة)</span></label><input id="pfVar" value="' + esc((p.variants || []).join('، ')) + '">' +
       '<div id="pfErr"></div><div class="row" style="margin-top:14px"><button class="btn" id="pfSave" type="button">حفظ المنتج</button>' +
       (isNew ? '' : '<button class="btn ghost" id="pfDel" type="button" style="flex:0 0 auto;color:#DC2626">مسح</button>') + '</div>', true);
 
@@ -234,7 +234,7 @@
       $all('[data-sx]', body).forEach(function (x) { x.onclick = function () { SP.splice(+x.dataset.sx, 1); drawSpecs(); }; });
     }
     function drawColors() {
-      $('#pfColors').innerHTML = CO.map(function (c, i) { return '<div class="r"><input type="color" value="' + esc(c.c || '#000000') + '" data-cc="' + i + '"><input placeholder="اسم اللون، مثلاً: وردي" value="' + esc(c.n) + '" data-cn="' + i + '"><button type="button" class="x" data-cx="' + i + '">×</button></div>'; }).join('');
+      $('#pfColors').innerHTML = CO.map(function (c, i) { return '<div class="r"><input type="color" value="' + esc(c.c || '#000000') + '" data-cc="' + i + '"><input placeholder="اسم النكهة، مثلاً: شوكولاتة" value="' + esc(c.n) + '" data-cn="' + i + '"><button type="button" class="x" data-cx="' + i + '">×</button></div>'; }).join('');
       $all('[data-cc]', body).forEach(function (x) { x.oninput = function () { CO[+x.dataset.cc].c = x.value; }; });
       $all('[data-cn]', body).forEach(function (x) { x.oninput = function () { CO[+x.dataset.cn].n = x.value; }; });
       $all('[data-cx]', body).forEach(function (x) { x.onclick = function () { CO.splice(+x.dataset.cx, 1); drawColors(); }; });
@@ -343,7 +343,7 @@
 
   /* ---------------- طلبات المنتجات ---------------- */
   var ORD = [], OF = { q: '', st: '', from: '', to: '' };
-  var ST_AR = { pending: 'قيد المراجعة', approved: 'تم قبول الطلب', preparing: 'جاري التجهيز', ready: 'جاهز للاستلام', shipped: 'تم الشحن', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
+  var ST_AR = { pending: 'قيد المراجعة', approved: 'تم قبول الطلب', preparing: 'جاري التجهيز', ready: 'جاهز للاستلام', shipped: 'خرج للتوصيل', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
   var ST_ORDER = ['pending', 'approved', 'preparing', 'ready', 'shipped', 'completed', 'rejected', 'cancelled'];
   function stB(s) { return '<span class="ost ' + esc(s) + '">' + esc(ST_AR[s] || s) + '</span>'; }
   function odt(iso) { var x = new Date(iso); return isNaN(x) ? '' : x.toLocaleString('ar-EG-u-nu-latn', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -420,7 +420,7 @@
       }).join('') + '</div>' +
       '<div class="so-det">' + r('إجمالي المنتجات', money(o.subtotal)) + (o.product_discount > 0 ? r('خصم المنتجات', '− ' + money(o.product_discount)) : '') +
       r('كود الخصم', o.promo_code ? '<span class="so-promo">' + esc(o.promo_code) + '</span> − ' + money(o.promo_discount) : '—') +
-      (disc > 0 ? r('إجمالي الخصومات', '− ' + money(disc)) : '') + (o.delivery === 'delivery' ? r('مصاريف الشحن', money(o.shipping)) : '') +
+      (disc > 0 ? r('إجمالي الخصومات', '− ' + money(disc)) : '') + (o.delivery === 'delivery' ? r('مصاريف التوصيل', money(o.shipping)) : '') +
       r('الإجمالي النهائي', '<b>' + money(o.total) + '</b>') + r('ملاحظات العميل', o.notes ? esc(o.notes) : '—') + '</div>' +
       '<div class="so-acts"><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(waNum(o.customer_phone)) + '?text=' + encodeURIComponent(msg) + '" style="background:#25D366;color:#062612">💬 واتساب العميل</a>' +
       '<a class="btn ghost" href="tel:' + esc(o.customer_phone) + '">📞 اتصال</a></div>' +
@@ -461,7 +461,7 @@
     sh('shopSettings').then(function (st) {
       $('#dsBox').innerHTML = '<p class="small muted" style="margin-top:0">الاستلام من الفرع متاح دايماً. لو فعّلت التوصيل، العميل هيقدر يختاره في إتمام الشراء ويكتب عنوانه.</p>' +
         '<label class="sp-tg" style="font-size:14px;color:#211020"><input type="checkbox" id="dsOn"' + (st.delivery_enabled ? ' checked' : '') + '> التوصيل متاح</label>' +
-        '<label>مصاريف الشحن (' + esc(PS.currency || 'ج.م') + ')</label><input id="dsFee" inputmode="decimal" value="' + (st.delivery_fee || '') + '" placeholder="0 = مجاناً">' +
+        '<label>مصاريف التوصيل (' + esc(PS.currency || 'ج.م') + ')</label><input id="dsFee" inputmode="decimal" value="' + (st.delivery_fee || '') + '" placeholder="0 = مجاناً">' +
         '<div id="dsErr"></div><div style="height:10px"></div><button type="button" class="btn" id="dsSave">حفظ</button>';
       $('#dsSave').onclick = function () {
         var btn = this; busy(btn, true);
