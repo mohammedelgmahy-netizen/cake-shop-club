@@ -67,6 +67,12 @@
     '.pd-sec h3{font-size:15px;margin:0 0 10px}',
     '.pd-desc{white-space:pre-line;font-size:14.5px;line-height:1.85;color:#DCE3F5}',
     '.pd-sw{display:flex;flex-wrap:wrap;gap:8px}',
+    'button.sw{font:inherit;color:inherit;cursor:pointer}.pd-sw .sw.on{border-color:var(--brand);box-shadow:0 0 0 2px rgba(94,224,219,.35)}',
+    '.pd-sw .sw img{width:22px;height:22px;border-radius:50%;object-fit:cover;flex:0 0 auto}',
+    '.pd-av.l{color:#F5C451}',
+    '.cnote{position:relative;background:linear-gradient(135deg,rgba(236,91,156,.18),rgba(94,224,219,.12));border:1px solid rgba(236,91,156,.45);border-radius:16px;padding:12px 14px 12px 40px;margin:-4px 0 14px}',
+    '.cnote b{display:block;font-size:15px}.cnote span{display:block;font-size:13px;margin-top:3px;line-height:1.6}.cnote small{color:var(--muted);font-size:11.5px}',
+    '.cnote .x{position:absolute;top:8px;left:8px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:inherit;font-size:16px;cursor:pointer}',
     '.pd-sw span{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 10px;font-size:13px;font-weight:700;background:rgba(255,255,255,.03)}',
     '.pd-sw i{width:18px;height:18px;border-radius:50%;border:1px solid rgba(255,255,255,.35);flex:0 0 auto}',
     '.pd-specs{width:100%;border-collapse:collapse;font-size:13.5px}',
@@ -182,7 +188,25 @@
   function norm(s) { return String(s || '').toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[ً-ْ]/g, '').replace(/\s+/g, ' ').trim(); }
   function catById(id) { return ((DATA && DATA.categories) || []).filter(function (c) { return c.id === id; })[0]; }
   function prodById(id) { return ((DATA && DATA.products) || []).filter(function (p) { return p.id === id; })[0]; }
-  function thumb(p) { return p.images && p.images[0] ? p.images[0].t || p.images[0].u : ''; }
+  function thumb(p, color) {
+    var im = colorImg(p, color); if (im) return im.t || im.u;
+    return p.images && p.images[0] ? p.images[0].t || p.images[0].u : '';
+  }
+  // صورة النكهة (بتتحدد من الإدارة لكل نكهة)
+  function colorImg(p, color) {
+    if (!color) return null;
+    var c = (p.colors || []).filter(function (x) { return x.n === color; })[0];
+    if (!c || !c.i) return null;
+    return (p.images || []).filter(function (im) { return im.u === c.i; })[0] || null;
+  }
+  function colorIdx(p, c) { var k = -1; (p.images || []).forEach(function (im, i) { if (k < 0 && c && c.i && im.u === c.i) k = i; }); return k; }
+  // متوفر / كمية قليلة (حد التنبيه من الإدارة)
+  function lowStock(p) {
+    if (!p.track_stock || !p.available || !p.stock) return false;
+    var lim = Number(p.low_stock_at === undefined || p.low_stock_at === null ? 3 : p.low_stock_at), tot = 0;
+    Object.keys(p.stock).forEach(function (k) { tot += Math.max(0, Number(p.stock[k]) || 0); });
+    return tot > 0 && tot <= lim;
+  }
   // لو قايمة اتخزنت كنص (نسخ قديمة) نرجعها قايمة
   function arr(v) { if (Array.isArray(v)) return v; if (typeof v === 'string') { try { var x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch (e) { return []; } } return []; }
   function fixData(d) {
@@ -252,13 +276,26 @@
     anchor.parentNode.insertBefore(o, anchor);
     var sm = document.createElement('div'); sm.id = 'ordSummary'; sm.className = 'osum'; sm.dir = 'rtl';
     anchor.parentNode.insertBefore(sm, anchor);
+    var nt = document.createElement('div'); nt.id = 'custNotes'; nt.dir = 'rtl';
+    anchor.parentNode.insertBefore(nt, anchor);
     drawSummary(); loadSummary();
+  }
+  /* ---------- إشعارات العميل (النقاط اللي اتضافت على طلباته) ---------- */
+  function loadNotes() {
+    if (!token()) return;
+    rpc(['myNotes', { token: token() }]).then(function (r) {
+      var el = document.getElementById('custNotes'); if (!el) return;
+      var un = (r.notes || []).filter(function (n) { return !n.read_at; }).slice(0, 3);
+      el.innerHTML = un.map(function (n) { return '<div class="cnote"><button type="button" class="x" aria-label="إخفاء">×</button><b>' + esc(n.title) + '</b>' + (n.body ? '<span>' + esc(n.body) + '</span>' : '') + '</div>'; }).join('');
+      Array.prototype.forEach.call(el.querySelectorAll('.x'), function (b) { b.onclick = function () { el.innerHTML = ''; rpc(['readNotes', { token: token() }]).catch(function () { }); }; });
+    }).catch(function () { });
   }
 
   /* ---------- ملخص طلبات العميل: الأونلاين + مشتريات المحل (من قاعدة البيانات) ---------- */
   var SUM = null;
   function loadSummary() {
     if (!token()) return Promise.resolve(null);
+    loadNotes();
     return rpc(['mySummary', { token: token() }]).then(function (r) { SUM = r; drawSummary(); if (/^#shop\/orders$/.test(location.hash) && ORDERS) fillOrders(); return r; }).catch(function () { return null; });
   }
   function drawSummary() {
@@ -409,8 +446,8 @@
       '<div class="pd-body">' + (c ? '<button type="button" class="pd-cat" id="pdCat">' + (c.image ? '' : esc(c.icon || '') + ' ') + esc(c.name) + '</button>' : '') +
       '<h1 class="pd-name">' + esc(p.name) + '</h1>' +
       '<div class="pd-price"><b>' + money(p.price) + '</b>' + (off ? '<s>' + money(p.old_price) + '</s><span class="sv">خصم ' + off + '% · وفّر ' + money(p.old_price - p.price) + '</span>' : '') + '</div>' +
-      '<span class="pd-av ' + (p.available ? 'y">✓ متوفر' : 'n">✕ غير متوفر حالياً') + '</span>' +
-      (p.colors && p.colors.length ? '<div class="pd-sec"><h3>النكهات المتاحة</h3><div class="pd-sw">' + p.colors.map(function (k) { return '<span>' + (k.c ? '<i style="background:' + esc(k.c) + '"></i>' : '') + esc(k.n) + '</span>'; }).join('') + '</div></div>' : '') +
+      '<span class="pd-av ' + (!p.available ? 'n">✕ غير متوفر حالياً' : lowStock(p) ? 'l">⚡ باقي كمية قليلة' : 'y">✓ متوفر') + '</span>' +
+      (p.colors && p.colors.length ? '<div class="pd-sec"><h3>النكهات المتاحة</h3><div class="pd-sw" id="pdSw">' + p.colors.map(function (k, i) { var ci = colorImg(p, k.n); return '<button type="button" class="sw" data-sw="' + i + '">' + (ci ? img(ci.t || ci.u, '') : k.c ? '<i style="background:' + esc(k.c) + '"></i>' : '') + esc(k.n) + '</button>'; }).join('') + '</div></div>' : '') +
       (p.variants && p.variants.length ? '<div class="pd-sec"><h3>الأحجام المتاحة</h3><div class="pd-sw">' + p.variants.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join('') + '</div></div>' : '') +
       (p.description ? '<div class="pd-sec"><h3>الوصف</h3><div class="pd-desc">' + esc(p.description) + '</div></div>' : '') +
       (p.specs && p.specs.length ? '<div class="pd-sec"><h3>التفاصيل</h3><table class="pd-specs">' + p.specs.map(function (s) { return '<tr><td dir="auto">' + esc(s[0]) + '</td><td dir="auto">' + esc(s[1]) + '</td></tr>'; }).join('') + '</table></div>' : '') +
@@ -436,6 +473,14 @@
       if (th) Array.prototype.forEach.call(th.children, function (d, k) { d.className = k === i ? 'on' : ''; });
     }, { passive: true });
     if (th) Array.prototype.forEach.call(th.children, function (b) { b.onclick = function () { track.scrollTo({ left: Number(b.dataset.i) * track.clientWidth, behavior: 'smooth' }); }; });
+    // الضغط على النكهة بيغير الصورة لصورة النكهة دي
+    var sw = document.getElementById('pdSw');
+    if (sw) Array.prototype.forEach.call(sw.children, function (b) {
+      b.onclick = function () {
+        Array.prototype.forEach.call(sw.children, function (x) { x.classList.toggle('on', x === b); });
+        var k = colorIdx(p, p.colors[+b.dataset.sw]); if (k >= 0) track.scrollTo({ left: k * track.clientWidth, behavior: 'smooth' });
+      };
+    });
     Array.prototype.forEach.call(track.querySelectorAll('img'), function (im) { im.onclick = function () { zoom(imgs, Number(im.dataset.i)); }; });
   }
 
@@ -477,7 +522,7 @@
     function close() { o.remove(); }
     o.addEventListener('click', function (e) { if (e.target === o) close(); });
     function draw() {
-      var t = thumb(p);
+      var t = thumb(p, S.color);
       o.innerHTML = '<div class="bx"><div class="hd"><div class="t">' + (t ? img(t, '') : '📦') + '</div><div><b>' + esc(p.name) + '</b><span class="small muted">' + money(p.price) + ' للقطعة</span></div><button type="button" class="x" data-x>×</button></div>' +
         (colors.length ? '<h4>اختار النكهة</h4><div class="ochips">' + colors.map(function (c, i) { var out = stockMax(p, c.n, S.variant) <= 0; return '<button type="button" data-c="' + i + '"' + (S.color === c.n ? ' class="on"' : '') + (out ? ' style="opacity:.45;text-decoration:line-through"' : '') + '>' + (c.c ? '<i style="background:' + esc(c.c) + '"></i>' : '') + esc(c.n) + (out ? ' <small>(خلصت)</small>' : '') + '</button>'; }).join('') + '</div>' : '') +
         (vars.length ? '<h4>اختار الحجم</h4><div class="ochips">' + vars.map(function (v, i) { var out = stockMax(p, S.color, v) <= 0; return '<button type="button" data-v="' + i + '"' + (S.variant === v ? ' class="on"' : '') + (out ? ' style="opacity:.45;text-decoration:line-through"' : '') + '>' + esc(v) + (out ? ' <small>(خلص)</small>' : '') + '</button>'; }).join('') + '</div>' : '') +
@@ -715,10 +760,10 @@
     return rpc(['myOrders', { token: token() }]).then(function (r) { ORDERS = r; return r; });
   }
   function orderCard(x) {
-    var inv = SUM && SUM.invoices && SUM.invoices['ON-' + x.order_no];
+    var inv = x.invoiced || (SUM && SUM.invoices && SUM.invoices['ON-' + x.order_no]);
     var prods = (x.items && x.items.length ? x.items : [{ name: x.product_name, qty: x.qty }]).map(function (i) { return i.qty + '× ' + i.name; }).join('، ');
     return '<a class="oc" href="#shop/orders/' + esc(x.id) + '" data-oid="' + esc(x.id) + '"><div class="t">' + (x.image ? img(x.image, '') : '📦') + '</div>' +
-      '<div class="m"><b>طلب أونلاين #' + x.order_no + (inv ? '<span class="tg">🧾 اتعمله فاتورة</span>' : '') + '</b><small>' + esc(dt(x.created_at)) + ' · ' + (x.delivery === 'delivery' ? '🚚 توصيل' : '🏪 استلام من الفرع') + '</small><small>' + esc(prods) + '</small><small>الإجمالي ' + money(x.total) + '</small>' + (x.promo_code ? '<small style="color:#34D399">🏷️ ' + esc(x.promo_code) + ' · وفّرت ' + money(x.promo_discount) + '</small>' : '') + '</div>' + stBadge(x.status) + '</a>';
+      '<div class="m"><b>طلب أونلاين #' + x.order_no + (inv ? '<span class="tg">🧾 اتعمله فاتورة</span>' : '') + '</b><small>' + esc(dt(x.created_at)) + ' · ' + (x.delivery === 'delivery' ? '🚚 توصيل' : '🏪 استلام من الفرع') + '</small><small>' + esc(prods) + '</small><small>الإجمالي ' + money(x.total) + (x.points ? ' · ⭐ +' + x.points + ' نقطة' : '') + '</small>' + (x.promo_code ? '<small style="color:#34D399">🏷️ ' + esc(x.promo_code) + ' · وفّرت ' + money(x.promo_discount) + '</small>' : '') + '</div>' + stBadge(x.status) + '</a>';
   }
   function renderOrders() {
     view.innerHTML = topBar('📦 طلباتي', false) + '<div class="ol" id="olist">' + (ORDERS ? '' : '<div class="sk" style="height:84px"></div><div class="sk" style="height:84px"></div>') + '</div>';

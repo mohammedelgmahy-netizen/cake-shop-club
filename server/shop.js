@@ -42,7 +42,7 @@ function cleanProduct(p) {
   const specs = (Array.isArray(p.specs) ? p.specs : []).slice(0, 60)
     .map((s) => [T(s && s[0]).slice(0, 80), T(s && s[1]).slice(0, 300)]).filter((s) => s[0] || s[1]);
   const colors = (Array.isArray(p.colors) ? p.colors : []).slice(0, 30)
-    .map((c) => ({ n: T(c && c.n).slice(0, 40), c: /^#[0-9a-f]{6}$/i.test(T(c && c.c)) ? T(c.c) : '' })).filter((c) => c.n);
+    .map((c) => ({ n: T(c && c.n).slice(0, 40), c: /^#[0-9a-f]{6}$/i.test(T(c && c.c)) ? T(c.c) : '', i: IMG_URL.test(T(c && c.i)) ? T(c.i) : '' })).filter((c) => c.n);
   const variants = (Array.isArray(p.variants) ? p.variants : []).slice(0, 30).map((v) => T(v).slice(0, 60)).filter(Boolean);
   const code = T(p.code).slice(0, 40);
   return {
@@ -73,7 +73,7 @@ function cleanStock(list, v) {
   return out;
 }
 
-const PRODUCT_COLS = 'id, code, category_id, name, description, price, old_price, available, hidden, images, specs, colors, variants, created_at, updated_at, track_stock';
+const PRODUCT_COLS = 'id, code, category_id, name, description, price, old_price, available, hidden, images, specs, colors, variants, created_at, updated_at, track_stock, low_stock_at';
 // المتاح لكل اختيار (النكهة|الحجم) للمنتجات اللي عليها تتبع مخزون: المتاح = الفعلي − المحجوز
 const STOCK_AVAIL = `case when p.track_stock then (select coalesce(json_object_agg(s.key, greatest(s.physical - s.reserved, 0)), '{}'::json) from cakeshop.mc_shop_stock s where s.product_id = p.id) end as stock`;
 const STOCK_FULL = `(select coalesce(json_agg(json_build_object('key', s.key, 'physical', s.physical, 'reserved', s.reserved, 'available', greatest(s.physical - s.reserved, 0)) order by s.key), '[]'::json) from cakeshop.mc_shop_stock s where s.product_id = p.id) as stock`;
@@ -95,9 +95,26 @@ async function catalog(sql) {
  * الأسعار والخصومات بتتحسب هنا في السيرفر من المنتجات وأكواد الخصم الحقيقية،
  * ومفيش أي سعر جاي من التطبيق بيتصدّق. */
 export const ORDER_STATUS = ['pending', 'approved', 'preparing', 'ready', 'shipped', 'completed', 'rejected', 'cancelled'];
+/* مسار الحالات الصارم: الحالات اللي ينفع الطلب ينتقل لها من حالته الحالية بس، ومفيش رجوع لورا.
+ *   توصيل: قيد المراجعة → تم القبول → جاري التجهيز → جاهز → تم الشحن → تم إتمام الطلب
+ *   استلام من الفرع: نفس المسار من غير «تم الشحن» (جاهز → تم إتمام الطلب)
+ *   الرفض: من «قيد المراجعة» بس. الإلغاء: أي وقت قبل الإتمام، وبسبب مكتوب.
+ *   الحالات النهائية: تم إتمام الطلب / مرفوض / ملغي. صاحب المحل بس يقدر يعمل تصحيح استثنائي بسبب مكتوب. */
+export function nextStatuses(status, delivery) {
+  switch (status) {
+    case 'pending': return ['approved', 'rejected', 'cancelled'];
+    case 'approved': return ['preparing', 'cancelled'];
+    case 'preparing': return ['ready', 'cancelled'];
+    case 'ready': return delivery === 'delivery' ? ['shipped', 'cancelled'] : ['completed', 'cancelled'];
+    case 'shipped': return delivery === 'delivery' ? ['completed', 'cancelled'] : ['completed', 'cancelled'];
+    default: return [];
+  }
+}
+const ST_AR = { pending: 'قيد المراجعة', approved: 'تم القبول', preparing: 'جاري التجهيز', ready: 'جاهز', shipped: 'تم الشحن', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
 const ORDER_COLS = `o.id, o.order_no, o.customer_id, o.customer_name, o.customer_phone, o.member_no, o.product_id, o.product_name, o.product_code,
   o.color, o.variant, o.qty, o.unit_price, o.total, o.notes, o.status, o.reject_reason, o.history, o.created_at, o.updated_at,
-  o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name, o.stock_state`;
+  o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name, o.stock_state,
+  o.invoice_no, o.invoice_status, o.invoice_error, o.invoice_at, o.points_awarded, o.completed_at`;
 const money2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 const PROMO_CODE = /^[A-Za-z0-9_-]{3,30}$/;
 
@@ -305,6 +322,15 @@ async function customerShop(sql, action, p) {
   }
   if (action === 'quote') return quote(sql, c, p, false);
   if (action === 'mySummary') return customerSummary(sql, c);
+  if (action === 'myNotes') { // إشعارات العميل (النقاط اللي اتضافت على طلباته ...)
+    const rows = await sql.unsafe(`select id, title, body, ref_type, ref_id, created_at, read_at from cakeshop.mc_shop_customer_notes
+      where customer_id = $1 order by created_at desc limit 30`, [c.customer_id]);
+    return { notes: rows.map((n) => Object.assign({}, n, { id: Number(n.id) })), unread: rows.filter((n) => !n.read_at).length };
+  }
+  if (action === 'readNotes') {
+    await sql.unsafe('update cakeshop.mc_shop_customer_notes set read_at = now() where customer_id = $1 and read_at is null', [c.customer_id]);
+    return { done: true };
+  }
   if (action === 'saveAddress') { // عنوان التوصيل المحفوظ في حساب العميل
     const a = T(p.address).slice(0, 500);
     if (a.length < 5) throw new Error('اكتب العنوان بالتفصيل');
@@ -382,6 +408,7 @@ function publicOrder(o, imgs) {
     shipping: Number(o.shipping), method: o.method, delivery: o.delivery, address: o.address || '', branch_name: o.branch_name || '',
     status: o.status, reject_reason: o.reject_reason, image: items[0] ? items[0].image : '', created_at: o.created_at, updated_at: o.updated_at,
     history: (Array.isArray(o.history) ? o.history : []).map((h) => ({ s: h.s, at: h.at })),
+    points: Number(o.points_awarded || 0), invoiced: !!o.invoice_no,
   };
 }
 
@@ -412,6 +439,94 @@ function cleanPromo(p) {
 }
 
 
+/* ---------------- فاتورة الطلب الأونلاين ونقاط العميل ----------------
+ * لما الطلب يبقى «تم إتمام الطلب»: فاتورة مبيعات واحدة بس في نظام المبيعات بتاع برنامج الولاء (رقمها ON-<رقم الطلب>)
+ * بنفس قواعد النقاط اللي في الإعدادات. النقاط بتتضاف بعد الفاتورة بس، ومرة واحدة.
+ * لو فشلت: الطلب بيتعلّم «فشلت الفاتورة» + إشعار للإدارة، وينفع تعيد المحاولة من تفاصيل الطلب. */
+async function invoiceOrder(ctx, token, id) {
+  const { sql } = ctx;
+  // حجز المحاولة: محاولة واحدة بس في نفس الوقت، ومفيش فاتورة تانية لو اتعملت قبل كده
+  const cl = await sql.unsafe(`update cakeshop.mc_shop_orders set invoice_status = 'working', invoice_error = ''
+    where id = $1 and status = 'completed' and invoice_status in ('none', 'failed') and invoice_no = ''
+    returning order_no, customer_id, customer_name, total, shipping`, [id]);
+  if (!cl.length) {
+    const r = await sql.unsafe('select invoice_status, invoice_no, points_awarded from cakeshop.mc_shop_orders where id = $1', [id]);
+    if (r.length && r[0].invoice_no) return { ok: true, already: true, invoice_no: r[0].invoice_no, points: Number(r[0].points_awarded) };
+    return { ok: false, error: r.length && r[0].invoice_status === 'working' ? 'الفاتورة بتتعمل دلوقتي، استنى ثواني' : 'الطلب مش جاهز للفاتورة' };
+  }
+  const o = cl[0], orderNo = Number(o.order_no), invNo = invoiceForOrder(orderNo);
+  const amount = money2(Number(o.total) - Number(o.shipping || 0));
+  const fail = async (msg) => {
+    await sql.unsafe("update cakeshop.mc_shop_orders set invoice_status = 'failed', invoice_error = $2 where id = $1", [id, msg.slice(0, 300)]);
+    await sql.unsafe(`insert into cakeshop.mc_shop_notifications (kind, title, body, ref_type, ref_id, dedupe_key)
+      values ('invoice_failed', $1, $2, 'order', $3, $4) on conflict (dedupe_key) do nothing`,
+      ['⚠️ فاتورة الطلب #' + orderNo + ' متعملتش', msg.slice(0, 300) + ' — افتح الطلب واضغط «إعادة المحاولة»', id, 'invfail:' + id + ':' + Date.now()]);
+    return { ok: false, error: msg };
+  };
+  try {
+    // لو الفاتورة اتسجلت قبل كده من الكاشير بنفس الرقم: نربطها بالطلب من غير ما نكررها
+    const ex = await sql.unsafe("select txn_id, points_earned from cakeshop.mc_transactions where invoice_no = $1 and customer_id = $2 and status <> 'void' limit 1", [invNo, o.customer_id]);
+    let points = 0, balance = null;
+    if (ex.length) {
+      points = Number(ex[0].points_earned || 0);
+    } else {
+      if (!(amount > 0)) return await fail('قيمة الطلب صفر، مفيش فاتورة تتعمل');
+      const r = await ctx.adminApi(token, 'checkout', { customer_id: o.customer_id, invoice_no: invNo, amount, category: '' }, 'ord-' + id + '-' + Date.now());
+      if (!r || !r.ok) return await fail((r && r.error) || 'تعذر إنشاء الفاتورة');
+      points = Number((r.data.quote && r.data.quote.points_earned) || 0);
+      balance = Number(r.data.balance);
+      await sql.unsafe("update cakeshop.mc_pointsledger set reason = $3 where customer_id = $1 and ref_id = $2 and type = 'EARN'",
+        [o.customer_id, r.data.txn_id, 'Online Purchase Reward – Order #' + orderNo]);
+    }
+    if (balance === null) {
+      const b = await sql.unsafe('select points_balance from cakeshop.mc_customers where customer_id = $1', [o.customer_id]);
+      balance = b.length ? Number(b[0].points_balance || 0) : 0;
+    }
+    await sql.unsafe(`update cakeshop.mc_shop_orders set invoice_status = 'done', invoice_no = $2, invoice_error = '', invoice_at = now(), points_awarded = $3 where id = $1`, [id, invNo, points]);
+    await sql.unsafe(`update cakeshop.mc_shop_notifications set read_at = coalesce(read_at, now()), read_by = case when read_at is null then 'النظام' else read_by end
+      where kind = 'invoice_failed' and ref_id = $1`, [id]);
+    await sql.unsafe(`insert into cakeshop.mc_shop_customer_notes (customer_id, title, body, ref_type, ref_id, dedupe_key)
+      values ($1, $2, $3, 'order', $4, $5) on conflict (dedupe_key) do nothing`,
+      [o.customer_id, points > 0 ? '🎉 كسبت ' + points + ' نقطة!' : '🍩 طلبك #' + orderNo + ' تم بنجاح',
+        points > 0 ? 'طلبك #' + orderNo + ' تم بنجاح، واتضافلك ' + points + ' نقطة في كارت Cake Shop. رصيدك دلوقتي ' + balance + ' نقطة. بالهنا والشفا 🍰'
+          : 'شكراً إنك اخترت Cake Shop Dessert Cafe. رصيد نقاطك دلوقتي ' + balance + ' نقطة. بالهنا والشفا 🍰',
+        id, 'order-done:' + id]);
+    return { ok: true, invoice_no: invNo, points, balance };
+  } catch (e) {
+    console.error(e);
+    return await fail(e && /[؀-ۿ]/.test(String(e.message)) ? e.message : 'حدث خطأ أثناء إنشاء الفاتورة');
+  }
+}
+
+/* إشعارات الإدارة + ملخص الطلبات. تذكير عيد الميلاد (قبلها بيوم) بيتعمل هنا مرة واحدة لكل عيد ميلاد (dedupe_key). */
+async function adminNotifications(sql) {
+  await sql.unsafe(`insert into cakeshop.mc_shop_notifications (kind, title, body, ref_type, ref_id, dedupe_key)
+    select 'birthday', '🎂 بكرة عيد ميلاد ' || c.name, 'عضوية ' || c.member_no || ' · ' || c.phone || ' — جهّزله تهنئة أو عرض عيد الميلاد',
+      'customer', c.customer_id, 'bday:' || c.customer_id || ':' || to_char(d.tmr, 'YYYY')
+    from cakeshop.mc_customers c, (select ((now() at time zone 'Africa/Cairo')::date + 1) tmr) d
+    where c.status = 'active' and c.birthdate ~ '^\\d{4}-\\d{2}-\\d{2}' and substr(c.birthdate, 6, 5) = to_char(d.tmr, 'MM-DD')
+    on conflict (dedupe_key) do nothing`);
+  const [r] = await sql.unsafe(`select json_build_object(
+    'items', (select coalesce(json_agg(n order by n.created_at desc), '[]') from (select id, kind, title, body, ref_type, ref_id, created_at, read_at, read_by
+       from cakeshop.mc_shop_notifications order by created_at desc limit 60) n),
+    'unread', (select count(*) from cakeshop.mc_shop_notifications where read_at is null),
+    'summary', (select json_build_object(
+       'new', (select count(*) from cakeshop.mc_shop_notifications where kind = 'new_order' and read_at is null),
+       'pending', count(*) filter (where status = 'pending'),
+       'approved', count(*) filter (where status = 'approved'),
+       'preparing', count(*) filter (where status = 'preparing'),
+       'ready', count(*) filter (where status = 'ready'),
+       'shipped', count(*) filter (where status = 'shipped'),
+       'completed', count(*) filter (where status = 'completed'),
+       'completed_today', count(*) filter (where status = 'completed' and (completed_at at time zone 'Africa/Cairo')::date = (now() at time zone 'Africa/Cairo')::date),
+       'awaiting_invoice', count(*) filter (where status = 'completed' and invoice_status <> 'done'),
+       'invoice_failed', count(*) filter (where status = 'completed' and invoice_status = 'failed'))
+     from cakeshop.mc_shop_orders)) as data`);
+  const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  d.items = d.items.map((n) => Object.assign(n, { id: Number(n.id) }));
+  return d;
+}
+
 /**
  * ctx: { sql, verifyAdmin: async (token) => user|throws, upload: async (dataUrl) => url }
  */
@@ -422,7 +537,7 @@ export async function handleShop(body, ctx) {
   try {
     if (fn === 'shop') {
       if (args[0] === 'catalog') return ok(await catalog(sql));
-      if (['order', 'quote', 'mySummary', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}));
+      if (['order', 'quote', 'mySummary', 'myNotes', 'readNotes', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}));
       return bad('طلب غير معروف');
     }
     // ---------- الإدارة ----------
@@ -442,13 +557,15 @@ export async function handleShop(body, ctx) {
 
 
     if (action === 'orders') {
-      const rows = await sql.unsafe(`select ${ORDER_COLS},
-          (select t.invoice_no from cakeshop.mc_transactions t where t.customer_id = o.customer_id and t.invoice_no = 'ON-' || o.order_no and t.status <> 'void' limit 1) as invoice_no
+      const rows = await sql.unsafe(`select ${ORDER_COLS.replace('o.invoice_no,', `coalesce(nullif(o.invoice_no, ''),
+          (select t.invoice_no from cakeshop.mc_transactions t where t.customer_id = o.customer_id and t.invoice_no = 'ON-' || o.order_no and t.status <> 'void' limit 1), '') as invoice_no,`)}
         from cakeshop.mc_shop_orders o order by o.created_at desc limit 2000`);
       const list = await withImages(sql, rows);
       return ok(list.map((o, i) => Object.assign(o, {
         customer_id: rows[i].customer_id, customer_name: rows[i].customer_name, customer_phone: rows[i].customer_phone, member_no: rows[i].member_no,
         admin_notes: rows[i].admin_notes || '', invoice_no: rows[i].invoice_no || '', stock_state: rows[i].stock_state || 'none', history: Array.isArray(rows[i].history) ? rows[i].history : [],
+        invoice_status: rows[i].invoice_no ? 'done' : (rows[i].invoice_status || 'none'), invoice_error: rows[i].invoice_error || '', invoice_at: rows[i].invoice_at, points_awarded: Number(rows[i].points_awarded || 0),
+        completed_at: rows[i].completed_at, next: nextStatuses(rows[i].status, rows[i].delivery), can_override: user.role === 'owner',
       })));
     }
 
@@ -457,19 +574,53 @@ export async function handleShop(body, ctx) {
       const st = T(p.status);
       if (ORDER_STATUS.indexOf(st) < 0) return bad('حالة غير معروفة');
       const reason = T(p.reason).slice(0, 300);
+      const override = !!p.override;
+      if (override && user.role !== 'owner') return bad('التصحيح الاستثنائي لصاحب المحل بس');
+      if (override && reason.length < 5) return bad('اكتب سبب التصحيح الاستثنائي (هيتسجل في سجل الطلب)');
       if (st === 'rejected' && !reason) return bad('اكتب سبب الرفض علشان يظهر للعميل');
-      const h = JSON.stringify([{ s: st, at: new Date().toISOString(), by: user.name || '' }]);
+      if (st === 'cancelled' && !reason) return bad('اكتب سبب الإلغاء علشان يظهر للعميل');
       // تغيير الحالة بيحجز/يفك/يخصم المخزون تلقائياً من قاعدة البيانات (Trigger) في نفس العملية
-      const r = await sql.begin(async (tx) => {
+      const res = await sql.begin(async (tx) => {
         await tx.unsafe("select set_config('cakeshop.actor', $1, true)", [user.name || 'الإدارة']);
-        return tx.unsafe(`update cakeshop.mc_shop_orders set status = $2,
+        const cur = await tx.unsafe('select status, delivery from cakeshop.mc_shop_orders where id = $1 for update', [T(p.id)]);
+        if (!cur.length) throw new Error('الطلب غير موجود');
+        const from = cur[0].status;
+        if (from === st) throw new Error('الطلب بالفعل في الحالة دي');
+        if (!override && nextStatuses(from, cur[0].delivery).indexOf(st) < 0) {
+          const nx = nextStatuses(from, cur[0].delivery).map((x) => '«' + ST_AR[x] + '»');
+          throw new Error('مينفعش الطلب يتنقل من «' + ST_AR[from] + '» لـ«' + ST_AR[st] + '». ' + (nx.length ? 'المتاح: ' + nx.join(' أو ') : 'دي حالة نهائية') + '.');
+        }
+        const entry = { s: st, at: new Date().toISOString(), by: user.name || '', from };
+        if (reason) entry.reason = reason;
+        if (override) entry.override = true;
+        await tx.unsafe(`update cakeshop.mc_shop_orders set status = $2,
           reject_reason = case when $2 in ('rejected','cancelled') then $3 else reject_reason end,
-          updated_at = now(), history = history || $4::text::jsonb where id = $1 and status <> $2 returning id`, [T(p.id), st, reason, h]);
+          completed_at = case when $2 = 'completed' then coalesce(completed_at, now()) else completed_at end,
+          updated_at = now(), history = history || $4::text::jsonb where id = $1`, [T(p.id), st, reason, JSON.stringify([entry])]);
+        return { from };
       });
-      if (!r.length) {
-        const e = await sql.unsafe('select 1 from cakeshop.mc_shop_orders where id = $1', [T(p.id)]);
-        return e.length ? bad('الطلب بالفعل في الحالة دي') : bad('الطلب غير موجود');
-      }
+      // الطلب اتقفل «تم إتمام الطلب» → فاتورة مبيعات تلقائية + نقاط العميل (مرة واحدة بس)
+      let invoice = null;
+      if (st === 'completed') invoice = await invoiceOrder(ctx, token, T(p.id));
+      return ok({ done: true, from: res.from, invoice });
+    }
+
+    if (action === 'retryInvoice') {
+      if (!UUID.test(T(p.id))) return bad('الطلب غير موجود');
+      const r = await sql.unsafe('select status from cakeshop.mc_shop_orders where id = $1', [T(p.id)]);
+      if (!r.length) return bad('الطلب غير موجود');
+      if (r[0].status !== 'completed') return bad('الفاتورة بتتعمل لما الطلب يبقى «تم إتمام الطلب»');
+      const inv = await invoiceOrder(ctx, token, T(p.id));
+      if (!inv.ok) return bad(inv.error);
+      return ok(inv);
+    }
+
+    if (action === 'notifications') return ok(await adminNotifications(sql));
+
+    if (action === 'readNotifications') {
+      const ids = (Array.isArray(p.ids) ? p.ids : []).map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0).slice(0, 500);
+      if (p.all) await sql.unsafe('update cakeshop.mc_shop_notifications set read_at = now(), read_by = $1 where read_at is null', [user.name || '']);
+      else if (ids.length) await sql.unsafe('update cakeshop.mc_shop_notifications set read_at = now(), read_by = $2 where id = any($1::bigint[]) and read_at is null', [ids, user.name || '']);
       return ok({ done: true });
     }
 
@@ -574,18 +725,20 @@ export async function handleShop(body, ctx) {
       const vals = [v.name, v.category_id, v.description, v.price, v.old_price, v.available, v.hidden,
         JSON.stringify(v.images), JSON.stringify(v.specs), JSON.stringify(v.colors), JSON.stringify(v.variants)];
       const track = !!p.track_stock;
+      const low = Math.floor(num(p.low_stock_at === undefined ? 3 : p.low_stock_at, 'حد التنبيه للمخزون المنخفض'));
+      if (low > 100000) return bad('حد التنبيه للمخزون المنخفض كبير جداً');
       const levels = cleanStock(p.stock, v);
       if (p.id && !UUID.test(T(p.id))) return bad('المنتج غير موجود');
       const id = await sql.begin(async (tx) => {
         let r;
         if (p.id) {
           r = await tx.unsafe(`update cakeshop.mc_shop_products set name=$1, category_id=$2, description=$3, price=$4, old_price=$5,
-            available=$6, hidden=$7, images=$8::text::jsonb, specs=$9::text::jsonb, colors=$10::text::jsonb, variants=$11::text::jsonb, code=$12, track_stock=$13, updated_at=now()
-            where id=$14 returning id`, [...vals, v.code, track, T(p.id)]);
+            available=$6, hidden=$7, images=$8::text::jsonb, specs=$9::text::jsonb, colors=$10::text::jsonb, variants=$11::text::jsonb, code=$12, track_stock=$13, low_stock_at=$14, updated_at=now()
+            where id=$15 returning id`, [...vals, v.code, track, low, T(p.id)]);
           if (!r.length) throw new Error('المنتج غير موجود');
         } else {
-          r = await tx.unsafe(`insert into cakeshop.mc_shop_products (name, category_id, description, price, old_price, available, hidden, images, specs, colors, variants, code, track_stock)
-            values ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb,$10::text::jsonb,$11::text::jsonb,$12,$13) returning id`, [...vals, v.code, track]);
+          r = await tx.unsafe(`insert into cakeshop.mc_shop_products (name, category_id, description, price, old_price, available, hidden, images, specs, colors, variants, code, track_stock, low_stock_at)
+            values ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb,$10::text::jsonb,$11::text::jsonb,$12,$13,$14) returning id`, [...vals, v.code, track, low]);
         }
         // الكميات الفعلية (جرد/إضافة بضاعة): كل تغيير بيتسجل في سجل حركات المخزون
         if (track) for (const l of levels) {

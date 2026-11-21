@@ -123,10 +123,8 @@ begin
   return new;
 end $$;
 
-drop trigger if exists mc_shop_orders_stock_ins on cakeshop.mc_shop_orders;
-create trigger mc_shop_orders_stock_ins before insert on cakeshop.mc_shop_orders for each row execute function cakeshop.orders_stock_ins();
-drop trigger if exists mc_shop_orders_stock_upd on cakeshop.mc_shop_orders;
-create trigger mc_shop_orders_stock_upd before update of status on cakeshop.mc_shop_orders for each row execute function cakeshop.orders_stock_upd();
+create or replace trigger mc_shop_orders_stock_ins before insert on cakeshop.mc_shop_orders for each row execute function cakeshop.orders_stock_ins();
+create or replace trigger mc_shop_orders_stock_upd before update of status on cakeshop.mc_shop_orders for each row execute function cakeshop.orders_stock_upd();
 
 -- تعديل الكمية الفعلية من الإدارة (جرد / إضافة بضاعة) مع تسجيل الحركة. مينفعش الفعلي يبقى أقل من المحجوز.
 create or replace function cakeshop.stock_set_physical(p_product uuid, p_key text, p_physical integer, p_by text, p_note text)

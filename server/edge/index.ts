@@ -47,7 +47,13 @@ async function verifyAdmin(token: string) {
   const out: any = await handle({ fn: 'adminApi', args: [token, 'me', {}, ''] }, db, { crypto, Buffer, uploadImage });
   const res = out && out.result;
   if (!res || !res.ok) return { ok: false, res: res || { ok: false, error: 'حدث خطأ في الخادم، حاول مرة أخرى' } };
-  return { ok: true, permissions: res.data.user.permissions, name: res.data.user.display_name || res.data.user.username || '' };
+  return { ok: true, permissions: res.data.user.permissions, role: res.data.user.role || '', name: res.data.user.display_name || res.data.user.username || '' };
+}
+
+// تنفيذ عملية في نظام الولاء نفسه بجلسة نفس المستخدم وصلاحياته (زي فاتورة الطلب الأونلاين)
+async function adminApi(token: string, action: string, payload: unknown, rid: string) {
+  const out: any = await handle({ fn: 'adminApi', args: [token, action, payload, rid] }, db, { crypto, Buffer, uploadImage });
+  return (out && out.result) || { ok: false, error: 'حدث خطأ في الخادم، حاول مرة أخرى' };
 }
 
 Deno.serve(async (req: Request) => {
@@ -61,7 +67,7 @@ Deno.serve(async (req: Request) => {
     const fn = (body as any)?.fn;
     if (fn === 'shop' || fn === 'shopAdmin') {
       return json(await handleShop(body, {
-        sql, verifyAdmin,
+        sql, verifyAdmin, adminApi,
         upload: (d: string) => storeImage(d, 'cs-products', 'product', 'تعذر رفع الصورة، حاول مرة أخرى'),
       }));
     }
