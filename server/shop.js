@@ -8,6 +8,8 @@
  * الرد بنفس شكل باقي النظام: { result: { ok, data } } أو { result: { ok: false, error } }
  */
 
+import { ADMIN_DATA_ACTIONS, adminData } from './admin-data.js';
+
 const T = (s) => String(s === undefined || s === null ? '' : s).trim();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const IMG_URL = /^https:\/\/[^\s"'<>]+$/;
@@ -598,6 +600,8 @@ export async function handleShop(body, ctx) {
     const user = await ctx.verifyAdmin(token);
     if (!user.ok) return { result: user.res };
     const perms = user.permissions || [];
+    // تقرير الأصناف ولوحة المؤشرات (صلاحية لوحة المؤشرات) — التصدير والنسخ الاحتياطي (صاحب المحل بس)
+    if (ADMIN_DATA_ACTIONS.indexOf(action) >= 0) return ok(await adminData(ctx, user, action, p));
     // الترابيزات وطلباتها: لموظف الكاشير (المبيعات) وصاحب المحل. إضافة وتعديل الترابيزات: صلاحية الإعدادات
     if (TABLE_STAFF_ACTIONS.indexOf(action) >= 0) {
       if (perms.indexOf('sales') < 0 && perms.indexOf('settings') < 0) return bad('ليس لديك صلاحية: الترابيزات');

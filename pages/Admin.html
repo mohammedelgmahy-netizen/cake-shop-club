@@ -506,10 +506,11 @@ function boot() {
 var PAGES = [
   ['dashboard', 'لوحة المؤشرات', 'dashboard', '📊', '#1BA8A2'], ['reports', 'التقارير', 'dashboard', '📈', '#2563EB'], ['sales', 'تسجيل بيع / استبدال', 'sales', '🧾', '#16A34A'], ['customers', 'العملاء', 'customers_view', '👥', '#2563EB'],
   ['offers', 'العروض', 'offers_manage', '🎁', '#DB2777'], ['products', 'المنتجات', 'settings', '🛍️', '#EA580C'], ['shoporders', 'طلبات المنتجات', 'settings', '📦', '#0D9488'], ['promos', 'أكواد الخصم', 'settings', '🏷️', '#D63F86'], ['tables', 'الترابيزات', 'sales', '🍽️', '#B45309'], ['tableorders', 'طلبات الترابيزات', 'sales', '🧾', '#7C3AED'], ['whatsapp', 'واتساب', 'whatsapp', '💬', '#059669'], ['birthdays', 'أعياد الميلاد', 'whatsapp', '🎂', '#E11D48'], ['ledger', 'سجل النقاط', 'customers_view', '⭐', '#D97706'],
-  ['settings', 'الإعدادات', 'settings', '⚙️', '#475569'], ['users', 'الموظفون', 'users_manage', '🧑‍💼', '#D63F86'], ['activity', 'سجل العمليات', 'audit', '📋', '#0F766E'], ['qr', 'QR المحل', null, '🔳', '#211020']
+  ['settings', 'الإعدادات', 'settings', '⚙️', '#475569'], ['users', 'الموظفون', 'users_manage', '🧑‍💼', '#D63F86'], ['activity', 'سجل العمليات', 'audit', '📋', '#0F766E'], ['export', 'تصدير Excel', null, '📤', '#15803D'], ['backup', 'Backup & Restore', null, '🛡️', '#0F766E'], ['qr', 'QR المحل', null, '🔳', '#211020']
 ];
 function pageOk(p) {
   if (p[0] === 'birthdays' && !hasFeature('birthday')) return false;
+  if ((p[0] === 'export' || p[0] === 'backup') && !(ME && ME.role === 'owner')) return false;
   return !p[2] || can(p[2]);
 }
 function buildNav() {
@@ -526,7 +527,7 @@ function go(p, opt) {
     (GO_OPT.label ? '<span class="badge gold">' + esc(GO_OPT.label) + '</span>' : '') + '</div>' : '') + '<div id="viewIn"></div>';
   if (back) $('#backBtn').onclick = function () { go(back[0], back[2]); };
   var v = $('#viewIn'); loading(v);
-  ({ dashboard: viewDashboard, reports: viewReports, birthdays: viewBirthdays, sales: viewSales, customers: viewCustomers, offers: viewOffers, shoporders: function (v) { if (window.viewShopOrders) viewShopOrders(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; }, promos: function (v) { if (window.viewShopPromos) viewShopPromos(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; }, products: function (v) { if (window.viewProducts) viewProducts(v); else v.innerHTML = '<div class="err">تعذر تحميل صفحة المنتجات، حدّث الصفحة</div>'; }, whatsapp: viewWhatsApp,
+  ({ dashboard: function (v) { if (window.viewDashPro) viewDashPro(v); else viewDashboard(v); }, export: function (v) { if (window.viewExport) viewExport(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; }, backup: function (v) { if (window.viewBackup) viewBackup(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; }, reports: viewReports, birthdays: viewBirthdays, sales: viewSales, customers: viewCustomers, offers: viewOffers, shoporders: function (v) { if (window.viewShopOrders) viewShopOrders(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; }, promos: function (v) { if (window.viewShopPromos) viewShopPromos(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; }, products: function (v) { if (window.viewProducts) viewProducts(v); else v.innerHTML = '<div class="err">تعذر تحميل صفحة المنتجات، حدّث الصفحة</div>'; }, whatsapp: viewWhatsApp,
      tables: function (v) { if (window.viewTables) viewTables(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; },
      tableorders: function (v) { if (window.viewTableOrders) viewTableOrders(v); else v.innerHTML = '<div class="err">تعذر تحميل الصفحة، حدّث الصفحة</div>'; },
      ledger: viewLedger, settings: viewSettings, users: viewUsers, activity: viewActivity, qr: viewQR }[p] || viewDashboard)(v);
@@ -650,7 +651,7 @@ function repById(id) { return REPORTS.filter(function (r) { return r.id === id; 
 function repOk(r) { return can(r.perm) && (!r.feat || hasFeature(r.feat)); }
 function viewReports(v) {
   var r = GO_OPT.report && repById(GO_OPT.report);
-  if (r && repOk(r)) return viewReport(v, r);
+  if (r && repOk(r)) return r.custom ? r.custom(v, r) : viewReport(v, r);
   var list = REPORTS.filter(repOk);
   v.innerHTML = '<div class="card"><h2>📈 التقارير</h2><p class="small muted">اختار التقرير اللي عايزه. كل تقرير فيه فلاتر وبحث وترتيب، وتقدر تنزّله Excel.</p>' +
     '<div class="rep-grid">' + list.map(function (x) { return '<button type="button" class="rep-card" data-rep="' + x.id + '"><i>' + x.ic + '</i><b>' + esc(x.t) + '</b><span>' + esc(x.d) + '</span></button>'; }).join('') + '</div></div>';
@@ -745,7 +746,7 @@ function cellHtml(c, row) {
 }
 function dataTable(box, cfg) {
   var st = { q: '', sk: cfg.sort ? cfg.sort[0] : null, sd: cfg.sort ? cfg.sort[1] : 1 };
-  box.innerHTML = '<div class="card"><div class="toolbar"><input id="dtQ" placeholder="بحث في النتائج"><button class="btn ghost sm" id="dtCsv" type="button">⬇️ تنزيل Excel</button></div>' +
+  box.innerHTML = '<div class="card"><div class="toolbar"><input id="dtQ" placeholder="بحث في النتائج">' + (ME && ME.role === 'owner' ? '<button class="btn ghost sm" id="dtCsv" type="button">⬇️ تنزيل Excel</button>' : '') + '</div>' +
     '<div class="small muted" id="dtInfo" style="margin:0 4px 8px"></div><div id="dtBody"></div></div>';
   var visible = function () {
     var q = st.q.trim().toLowerCase(), rows = cfg.rows;
@@ -780,8 +781,9 @@ function dataTable(box, cfg) {
     $all('#dtBody [data-cid]').forEach(function (tr) { tr.onclick = function () { openCustomer(tr.dataset.cid); }; });
   };
   var t; $('#dtQ').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { st.q = $('#dtQ').value; render(); }, 200); });
-  $('#dtCsv').onclick = function () {
+  if ($('#dtCsv')) $('#dtCsv').onclick = function () {
     var rows = visible();
+    if (window.mcExportTable) { var b = this; busy(b, true); return mcExportTable(cfg.cols, rows, cfg.file).then(function () { toast('تم تنزيل الملف ✓'); }).catch(function (e) { toast(e.message, true); }).then(function () { busy(b, false); }); }
     var q = function (x) { x = x === undefined || x === null ? '' : String(x); return '"' + x.replace(/"/g, '""') + '"'; };
     var lines = [cfg.cols.map(function (c) { return q(c.l); }).join(',')].concat(rows.map(function (row) {
       return cfg.cols.map(function (c) { var v = row[c.k]; return q(c.date ? (v ? fmtDate(v, 'ar', 1) : '') : (c.map ? cellVal(c, row) : v)); }).join(',');
@@ -1764,5 +1766,6 @@ boot();
 
 <script src="shop-admin.js?v=c39150ec8b"></script>
 <script src="tables-admin.js?v=68c6787171"></script>
+<script src="reports-admin.js?v=5ccebb71b3"></script>
 </body>
 </html>
