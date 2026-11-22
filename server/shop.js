@@ -1463,7 +1463,7 @@ async function backupRestore(sql, user, p) {
         if (src.rows.length && names.length) {
           const cl = names.map((c) => '"' + c.replace(/"/g, '') + '"').join(', ');
           for (let i = 0; i < src.rows.length; i += 500) {
-            await tx.unsafe(`insert into cakeshop."${t}" (${cl}) overriding system value select ${cl} from json_populate_recordset(null::cakeshop."${t}", $1::json)`, [JSON.stringify(src.rows.slice(i, i + 500))]);
+            await tx.unsafe(`insert into cakeshop."${t}" (${cl}) overriding system value select ${cl} from json_populate_recordset(null::cakeshop."${t}", ($1::text)::json)`, [JSON.stringify(src.rows.slice(i, i + 500))]);
           }
         }
         for (const c of cur) {
