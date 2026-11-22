@@ -1408,6 +1408,9 @@ async function backupTables(q) {
 async function tableCols(q, t) {
   return q.unsafe(`select column_name, column_default, is_identity, is_generated from information_schema.columns where table_schema = 'cakeshop' and table_name = $1 order by ordinal_position`, [t]);
 }
+// بصمة الملف بترتيب ثابت للمفاتيح، عشان تفضل مطابقة مهما كان البرنامج اللي فتح الملف وحفظه
+const canon = (v) => (Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : v && typeof v === 'object'
+  ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v));
 async function sha256(str) {
   const h = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -1425,7 +1428,7 @@ async function backupCreate(sql, user, p) {
     counts[t] = rows.length;
   }
   const body = JSON.stringify(tables);
-  const checksum = await sha256(body);
+  const checksum = await sha256(canon(tables));
   const [m] = await sql.unsafe(`insert into cakeshop.mc_backups (kind, created_by, note, size_bytes, tables_count, rows_count, checksum)
     values ('backup', $1, $2, $3, $4, $5, $6) returning id, created_at`,
     [user.name || '', note, body.length, Object.keys(tables).length, Object.values(counts).reduce((a, b) => a + b, 0), checksum]);
@@ -1441,7 +1444,7 @@ async function backupInfo(sql) {
 async function backupRestore(sql, user, p) {
   const b = p.backup;
   if (!b || b.format !== 'cakeshop-backup' || !b.tables || typeof b.tables !== 'object') throw new Error('الملف ده مش نسخة احتياطية من Cake Shop');
-  const sum = await sha256(JSON.stringify(b.tables));
+  const sum = await sha256(canon(b.tables));
   if (sum !== b.checksum) throw new Error('الملف متغيّر أو ناقص (الـ checksum مش مطابق). مش هينفع يترجع.');
   if (!p.dry_run && T(p.confirm) !== 'استرجاع') throw new Error('اكتب كلمة «استرجاع» للتأكيد');
   const ROLLBACK = '__dry_run__';
