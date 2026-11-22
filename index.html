@@ -22,9 +22,9 @@ window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); 
   var params = {}; new URLSearchParams(location.search).forEach(function(v,k){ params[k]=v; });
   var base = location.href.split('#')[0].split('?')[0];
   function fail(){ document.getElementById('m').innerHTML = 'تعذر الاتصال. تأكد من الإنترنت ثم <a href="" style="color:#5EE0DB">أعد المحاولة</a>'; }
-  var V = {"Register":"375c7dab69","Card":"ab79341c39","Unsub":"463c3be20d","Message":"4a901c5b01","Admin":"a15580ac50"};
+  var V = {"Register":"375c7dab69","Card":"34cca0d7d6","Unsub":"463c3be20d","Message":"4a901c5b01","Admin":"1e1340ae85","Table":"03e786a20a"};
   var getPage = function(n){ return fetch(base.replace(/[^/]*$/, '') + 'pages/' + n + '.html?v=' + V[n]).then(function(r){ if (!r.ok) throw new Error('page'); return r.text(); }); };
-  var guess = params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
+  var guess = params.tb ? 'Table' : params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
   var early = getPage(guess); early.catch(function(){});
   window.MC_FUNCTION_URL = FN;
   window.__mcPost = function(body){
@@ -33,6 +33,8 @@ window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); 
   if (window.__mcJson) return send('application/json');
   return send('text/plain;charset=UTF-8').catch(function(e){ if (e && e.name === 'AbortError') throw e; window.__mcJson = true; return send('application/json'); });
 };
+  // QR الترابيزة: منيو الطلب من الترابيزة مباشرة
+  if (params.tb) { window.__MC_BOOT__ = { tb: params.tb }; early.then(function(html){ document.open(); document.write(html); document.close(); document.title = 'Cake Shop Dessert Cafe'; }).catch(fail); return; }
   window.__mcPost(JSON.stringify({ fn: 'page', args: [params] }))
     .then(function(j){
       if (!j.result) return fail();

@@ -239,6 +239,8 @@
   function img(src, alt, extra) { return '<img class="ld" src="' + esc(src) + '" alt="' + esc(alt || '') + '"' + (extra || '') + ' onload="this.classList.add(\'ok\')" onerror="__shopImgErr(this)">'; }
   window.__shopImgErr = function (el) { var f = document.createElement('span'); f.className = 'imgfail'; f.innerHTML = '📷<small>الصورة مش متاحة</small>'; if (el.dataset.i) f.dataset.i = el.dataset.i; el.replaceWith(f); };
   function token() { return window.TOKEN || (window.BOOT && BOOT.token) || ''; }
+  // علشان طلب الترابيزة من نفس الموبايل يتربط بكارت العميل تلقائياً
+  try { if (token()) localStorage.setItem('cs_card_token', token()); } catch (e) { }
   var ST_AR = { pending: 'قيد المراجعة', approved: 'تم قبول الطلب', preparing: 'جاري التجهيز', ready: 'جاهز للاستلام', shipped: 'خرج للتوصيل', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
   function stBadge(s) { return '<span class="ost ' + esc(s) + '">' + esc(ST_AR[s] || s) + '</span>'; }
   function dt(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('ar-EG-u-nu-latn', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }

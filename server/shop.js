@@ -110,13 +110,14 @@ async function catalog(sql) {
 /* ---------------- السلة وإتمام الشراء والطلبات ----------------
  * الأسعار والخصومات بتتحسب هنا في السيرفر من المنتجات وأكواد الخصم الحقيقية،
  * ومفيش أي سعر جاي من التطبيق بيتصدّق. */
-export const ORDER_STATUS = ['pending', 'approved', 'preparing', 'ready', 'shipped', 'completed', 'rejected', 'cancelled'];
+export const ORDER_STATUS = ['pending', 'approved', 'preparing', 'ready', 'shipped', 'served', 'completed', 'rejected', 'cancelled'];
 /* مسار الحالات الصارم: الحالات اللي ينفع الطلب ينتقل لها من حالته الحالية بس، ومفيش رجوع لورا.
  *   توصيل: قيد المراجعة → تم القبول → جاري التجهيز → جاهز → تم الشحن → تم إتمام الطلب
  *   استلام من الفرع: نفس المسار من غير «تم الشحن» (جاهز → تم إتمام الطلب)
  *   الرفض: من «قيد المراجعة» بس. الإلغاء: أي وقت قبل الإتمام، وبسبب مكتوب.
  *   الحالات النهائية: تم إتمام الطلب / مرفوض / ملغي. صاحب المحل بس يقدر يعمل تصحيح استثنائي بسبب مكتوب. */
 export function nextStatuses(status, delivery) {
+  if (delivery === 'dinein') return DINE_NEXT[status] || []; // طلبات الترابيزات: جديد → تم التأكيد → جاري التجهيز → جاهز → تم التقديم → مكتمل
   switch (status) {
     case 'pending': return ['approved', 'rejected', 'cancelled'];
     case 'approved': return ['preparing', 'cancelled'];
@@ -126,7 +127,7 @@ export function nextStatuses(status, delivery) {
     default: return [];
   }
 }
-const ST_AR = { pending: 'قيد المراجعة', approved: 'تم القبول', preparing: 'جاري التجهيز', ready: 'جاهز', shipped: 'تم الشحن', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
+const ST_AR = { pending: 'قيد المراجعة', approved: 'تم القبول', preparing: 'جاري التجهيز', ready: 'جاهز', shipped: 'تم الشحن', served: 'تم التقديم', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
 const ORDER_COLS = `o.id, o.order_no, o.customer_id, o.customer_name, o.customer_phone, o.member_no, o.product_id, o.product_name, o.product_code,
   o.color, o.variant, o.qty, o.unit_price, o.total, o.notes, o.status, o.reject_reason, o.history, o.created_at, o.updated_at,
   o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name, o.stock_state, o.birthday_discount,
@@ -364,7 +365,7 @@ async function withImages(sql, rows) {
 async function customerShop(sql, action, p, ctx) {
   const c = await customerByToken(sql, p.token);
   if (action === 'myOrders') {
-    const rows = await sql.unsafe(`select ${ORDER_COLS} from cakeshop.mc_shop_orders o where o.customer_id = $1 order by o.created_at desc limit 200`, [c.customer_id]);
+    const rows = await sql.unsafe(`select ${ORDER_COLS} from cakeshop.mc_shop_orders o where o.customer_id = $1 and o.delivery <> 'dinein' order by o.created_at desc limit 200`, [c.customer_id]);
     return withImages(sql, rows);
   }
   if (action === 'quote') return quote(sql, c, p, false, await birthdayOffer(ctx, p.token));
@@ -412,7 +413,7 @@ export const invoiceForOrder = (orderNo) => 'ON-' + orderNo;
 async function customerSummary(sql, c) {
   const [r] = await sql.unsafe(`with o as (
       select id, order_no, status, total, shipping, delivery, branch_name, created_at, items, product_name, qty
-      from cakeshop.mc_shop_orders where customer_id = $1),
+      from cakeshop.mc_shop_orders where customer_id = $1 and delivery <> 'dinein'),
     t as (
       select txn_id, invoice_no, net_amount, amount, points_earned, created_at,
         exists (select 1 from o where 'ON-' || o.order_no = t0.invoice_no) as linked
@@ -571,7 +572,7 @@ async function adminNotifications(sql) {
        'completed_today', count(*) filter (where status = 'completed' and (completed_at at time zone 'Africa/Cairo')::date = (now() at time zone 'Africa/Cairo')::date),
        'awaiting_invoice', count(*) filter (where status = 'completed' and invoice_status <> 'done'),
        'invoice_failed', count(*) filter (where status = 'completed' and invoice_status = 'failed'))
-     from cakeshop.mc_shop_orders)) as data`);
+     from cakeshop.mc_shop_orders where delivery <> 'dinein')) as data`);
   const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
   d.items = d.items.map((n) => Object.assign(n, { id: Number(n.id) }));
   return d;
@@ -587,6 +588,7 @@ export async function handleShop(body, ctx) {
   try {
     if (fn === 'shop') {
       if (args[0] === 'catalog') return ok(await catalog(sql));
+      if (['tableBoot', 'tableStatus', 'tableQuote', 'tableOrder', 'tableHelp'].indexOf(args[0]) >= 0) return ok(await tableCustomer(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}, ctx));
       if (['order', 'quote', 'mySummary', 'myNotes', 'readNotes', 'myBirthday', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}, ctx));
       return bad('طلب غير معروف');
     }
@@ -595,7 +597,22 @@ export async function handleShop(body, ctx) {
     const p = args[2] && typeof args[2] === 'object' ? args[2] : {};
     const user = await ctx.verifyAdmin(token);
     if (!user.ok) return { result: user.res };
-    if ((user.permissions || []).indexOf('settings') < 0) return bad('ليس لديك صلاحية: إدارة المنتجات');
+    const perms = user.permissions || [];
+    // الترابيزات وطلباتها: لموظف الكاشير (المبيعات) وصاحب المحل. إضافة وتعديل الترابيزات: صلاحية الإعدادات
+    if (TABLE_STAFF_ACTIONS.indexOf(action) >= 0) {
+      if (perms.indexOf('sales') < 0 && perms.indexOf('settings') < 0) return bad('ليس لديك صلاحية: الترابيزات');
+      return ok(await tablesAdmin(ctx, token, user, action, p));
+    }
+    if (TABLE_OWNER_ACTIONS.indexOf(action) >= 0) {
+      if (perms.indexOf('settings') < 0) return bad('ليس لديك صلاحية: إدارة الترابيزات');
+      return ok(await tablesAdmin(ctx, token, user, action, p));
+    }
+    if (perms.indexOf('settings') < 0) {
+      // موظف المبيعات يقدر يغيّر حالة طلبات الترابيزات بس
+      const dine = action === 'setOrderStatus' && UUID.test(T(p.id)) && perms.indexOf('sales') >= 0
+        && (await sql.unsafe("select 1 from cakeshop.mc_shop_orders where id = $1 and delivery = 'dinein'", [T(p.id)])).length;
+      if (!dine) return bad('ليس لديك صلاحية: إدارة المنتجات');
+    }
 
     if (action === 'list') {
       const [r] = await sql.unsafe(`select json_build_object(
@@ -609,7 +626,7 @@ export async function handleShop(body, ctx) {
     if (action === 'orders') {
       const rows = await sql.unsafe(`select ${ORDER_COLS.replace('o.invoice_no,', `coalesce(nullif(o.invoice_no, ''),
           (select t.invoice_no from cakeshop.mc_transactions t where t.customer_id = o.customer_id and t.invoice_no = 'ON-' || o.order_no and t.status <> 'void' limit 1), '') as invoice_no,`)}
-        from cakeshop.mc_shop_orders o order by o.created_at desc limit 2000`);
+        from cakeshop.mc_shop_orders o where o.delivery <> 'dinein' order by o.created_at desc limit 2000`);
       const list = await withImages(sql, rows);
       return ok(list.map((o, i) => Object.assign(o, {
         customer_id: rows[i].customer_id, customer_name: rows[i].customer_name, customer_phone: rows[i].customer_phone, member_no: rows[i].member_no,
@@ -648,24 +665,27 @@ export async function handleShop(body, ctx) {
           completed_at = case when $2 = 'completed' then coalesce(completed_at, now()) else completed_at end,
           updated_at = now(), history = history || $4::text::jsonb where id = $1`, [T(p.id), st, reason, JSON.stringify([entry])]);
         // إشعار للعميل في كارته بحالة طلبه (الإتمام بيتبعت مع النقاط بعد الفاتورة)
-        const NOTE = { approved: ['✅ طلبك #N اتقبل', 'المحل وافق على طلبك وهيبدأ يجهزه.'], preparing: ['👩‍🍳 بنجهز طلبك #N', 'طلبك دلوقتي في المطبخ 🍰'],
+        const dine = cur[0].delivery === 'dinein';
+        const NOTE = dine ? { approved: ['✅ طلبك #N اتأكد', 'المحل استلم طلبك من الترابيزة.'], preparing: ['👩‍🍳 بنجهز طلبك #N', 'طلبك دلوقتي في المطبخ 🍰'],
+          ready: ['🍰 طلبك #N جاهز', 'هيوصلك على الترابيزة حالاً.'], served: ['🍽️ طلبك #N اتقدّم', 'بالهنا والشفا 🍰'], cancelled: ['🚫 طلبك #N اتلغى', reason] }[st] : { approved: ['✅ طلبك #N اتقبل', 'المحل وافق على طلبك وهيبدأ يجهزه.'], preparing: ['👩‍🍳 بنجهز طلبك #N', 'طلبك دلوقتي في المطبخ 🍰'],
           ready: [cur[0].delivery === 'delivery' ? '📦 طلبك #N جاهز' : '🏪 طلبك #N جاهز للاستلام', cur[0].delivery === 'delivery' ? 'هيخرج للتوصيل قريب.' : 'تقدر تعدّي تستلمه من الفرع.'],
           shipped: ['🚚 طلبك #N خرج للتوصيل', 'المندوب في الطريق ليك.'], rejected: ['❌ طلبك #N اترفض', reason], cancelled: ['🚫 طلبك #N اتلغى', reason] }[st];
-        if (NOTE) await tx.unsafe(`insert into cakeshop.mc_shop_customer_notes (customer_id, title, body, ref_type, ref_id, dedupe_key)
+        if (NOTE && cur[0].customer_id) await tx.unsafe(`insert into cakeshop.mc_shop_customer_notes (customer_id, title, body, ref_type, ref_id, dedupe_key)
           values ($1, $2, $3, 'order', $4, $5) on conflict (dedupe_key) do nothing`,
           [cur[0].customer_id, NOTE[0].replace('#N', '#' + cur[0].order_no), NOTE[1] || '', T(p.id), 'order-st:' + T(p.id) + ':' + st + ':' + Date.now()]);
-        return { from };
+        return { from, dine };
       });
       // الطلب اتقفل «تم إتمام الطلب» → فاتورة مبيعات تلقائية + نقاط العميل (مرة واحدة بس)
       let invoice = null;
-      if (st === 'completed') invoice = await invoiceOrder(ctx, token, T(p.id));
+      if (st === 'completed' && !res.dine) invoice = await invoiceOrder(ctx, token, T(p.id)); // طلبات الترابيزات فاتورتها مع قفل حساب الترابيزة
       return ok({ done: true, from: res.from, invoice });
     }
 
     if (action === 'retryInvoice') {
       if (!UUID.test(T(p.id))) return bad('الطلب غير موجود');
-      const r = await sql.unsafe('select status from cakeshop.mc_shop_orders where id = $1', [T(p.id)]);
+      const r = await sql.unsafe('select status, delivery from cakeshop.mc_shop_orders where id = $1', [T(p.id)]);
       if (!r.length) return bad('الطلب غير موجود');
+      if (r[0].delivery === 'dinein') return bad('فاتورة طلبات الترابيزة بتتعمل مع قفل حساب الترابيزة');
       if (r[0].status !== 'completed') return bad('الفاتورة بتتعمل لما الطلب يبقى «تم إتمام الطلب»');
       const inv = await invoiceOrder(ctx, token, T(p.id));
       if (!inv.ok) return bad(inv.error);
@@ -843,4 +863,332 @@ export async function handleShop(body, ctx) {
     console.error(e);
     return bad('حدث خطأ في الخادم، حاول مرة أخرى');
   }
+}
+
+/* ======================================================================
+ * نظام الترابيزات (Dine-in & Table Ordering)
+ *   العميل بيمسح QR الترابيزة (رابط فيه ?tb=<qr_key>) → منيو المحل والسلة → الطلب بيتسجل في نفس جدول الطلبات
+ *   بنوع delivery = 'dinein' ومربوط بالترابيزة وجلستها. الأسعار والعروض والنقاط من نفس نظام المحل (quote).
+ *   الجلسة بتتفتح مع أول طلب وبتفضل مفتوحة لحد ما الموظف يقفل الحساب، وبعدها الترابيزة ترجع متاحة.
+ *   فاتورة الجلسة في برنامج الولاء (لو العميل مسجل) رقمها TB-<رقم الجلسة>، ونقاطها من المبلغ المسموح بالنقاط بس.
+ * ====================================================================== */
+export const DINE_NEXT = { pending: ['approved', 'cancelled'], approved: ['preparing', 'cancelled'], preparing: ['ready', 'cancelled'], ready: ['served', 'cancelled'], served: ['completed'] };
+export const invoiceForSession = (no) => 'TB-' + no;
+const HELP_KINDS = { help: 'طلب مساعدة', bill: 'طلب الحساب', order: 'استفسار عن الطلب' };
+const SESSION_COLS = `s.id, s.session_no, s.table_id, s.table_name, s.status, s.customer_id, s.customer_name, s.customer_phone, s.member_no, s.opened_at, s.closed_at, s.closed_by,
+  s.payment_status, s.orders_count, s.subtotal, s.discount, s.total, s.points_amount, s.invoice_no, s.invoice_status, s.invoice_error, s.points_awarded`;
+const TABLE_KEY = /^[0-9a-f]{32}$/;
+const fixSession = (s) => s && Object.assign({}, s, { session_no: Number(s.session_no), subtotal: Number(s.subtotal), discount: Number(s.discount), total: Number(s.total),
+  points_amount: Number(s.points_amount), points_awarded: Number(s.points_awarded), orders_count: Number(s.orders_count) });
+
+async function tableByKey(q, key) {
+  const k = T(key).toLowerCase();
+  if (!TABLE_KEY.test(k)) throw new Error('كود الترابيزة غير صحيح. امسح الـ QR اللي على الترابيزة تاني.');
+  const r = await q.unsafe('select id, name, seats, active from cakeshop.mc_shop_tables where qr_key = $1', [k]);
+  if (!r.length) throw new Error('الترابيزة دي مش موجودة. امسح الـ QR اللي على الترابيزة تاني.');
+  if (!r[0].active) throw new Error('الترابيزة دي مش متاحة للطلب دلوقتي. كلّم حد من فريق المحل.');
+  return r[0];
+}
+async function optCustomer(sql, token) {
+  const t = T(token);
+  if (!/^[a-f0-9]{64}$/.test(t)) return null;
+  const r = await sql.unsafe("select customer_id, name, phone, member_no, access_token from cakeshop.mc_customers where access_token = $1 and status = 'active'", [t]);
+  return r[0] || null;
+}
+async function sessionCustomer(q, s) {
+  if (!s || !s.customer_id) return null;
+  const r = await q.unsafe("select customer_id, name, phone, member_no, access_token from cakeshop.mc_customers where customer_id = $1 and status = 'active'", [s.customer_id]);
+  return r[0] || null;
+}
+async function sessionOrders(sql, sessionId) {
+  const rows = await sql.unsafe(`select ${ORDER_COLS}, o.table_name, o.session_id, o.points_amount from cakeshop.mc_shop_orders o where o.session_id = $1 order by o.created_at`, [sessionId]);
+  const list = await withImages(sql, rows);
+  return list.map((o, i) => Object.assign(o, { table_name: rows[i].table_name, points_amount: rows[i].points_amount === null ? null : Number(rows[i].points_amount) }));
+}
+async function activeOffers(sql) { // العروض الحالية (العروض المتاحة لكل العملاء)
+  return sql.unsafe(`select offer_id, title, description, image_url, end_date from cakeshop.mc_offers
+    where active is true and coalesce(target_type, 'all') = 'all'
+      and (start_date is null or start_date::date <= (now() at time zone 'Africa/Cairo')::date)
+      and (end_date is null or end_date::date >= (now() at time zone 'Africa/Cairo')::date)
+    order by created_at desc limit 20`);
+}
+async function openSessionOf(q, tableId) {
+  const r = await q.unsafe(`select ${SESSION_COLS} from cakeshop.mc_shop_table_sessions s where s.table_id = $1 and s.status = 'open'`, [tableId]);
+  return r[0] || null;
+}
+
+// ---------- العميل (من QR الترابيزة) ----------
+async function tableCustomer(sql, action, p, ctx) {
+  const tb = await tableByKey(sql, p.key);
+  const me = await optCustomer(sql, p.token);
+  if (action === 'tableBoot' || action === 'tableStatus') {
+    const s = await openSessionOf(sql, tb.id);
+    const out = { table: { name: tb.name, seats: tb.seats }, session: s ? { session_no: Number(s.session_no), customer_name: s.customer_name, opened_at: s.opened_at } : null,
+      orders: s ? await sessionOrders(sql, s.id) : [], me: me ? { name: me.name, member_no: me.member_no } : null,
+      help: (await sql.unsafe("select id, kind, created_at from cakeshop.mc_shop_table_help where table_id = $1 and status = 'open' order by id", [tb.id])).map((h) => ({ id: Number(h.id), kind: h.kind, label: HELP_KINDS[h.kind] || h.kind, created_at: h.created_at })) };
+    out.orders = out.orders.map((o) => { delete o.history; return o; });
+    if (action === 'tableBoot') { out.catalog = await catalog(sql); out.offers = await activeOffers(sql); }
+    return out;
+  }
+  if (action === 'tableQuote') {
+    const s = await openSessionOf(sql, tb.id);
+    const c = (await sessionCustomer(sql, s)) || me;
+    const qt = await quote(sql, c || { customer_id: '', name: '', phone: '', member_no: '' }, { items: p.items, delivery: 'pickup' }, false, c ? await birthdayOffer(ctx, c.access_token) : null);
+    return Object.assign(qt, { shipping: 0, delivery: 'dinein', branches: [], saved_address: '', customer: c ? { name: c.name, member_no: c.member_no } : null });
+  }
+  if (action === 'tableOrder') {
+    const notes = T(p.notes).slice(0, 500);
+    let custToken = '';
+    const r = await sql.begin(async (tx) => {
+      await tx.unsafe("select set_config('cakeshop.actor', $1, true)", ['ترابيزة ' + tb.name]);
+      await tx.unsafe('select id from cakeshop.mc_shop_tables where id = $1 for update', [tb.id]); // طلب واحد في نفس الوقت لنفس الترابيزة
+      let s = await openSessionOf(tx, tb.id);
+      if (!s) {
+        const ins = await tx.unsafe(`insert into cakeshop.mc_shop_table_sessions (table_id, table_name, customer_id, customer_name, customer_phone, member_no)
+          values ($1, $2, $3, $4, $5, $6) returning id`, [tb.id, tb.name, me ? me.customer_id : '', me ? me.name : '', me ? me.phone : '', me ? me.member_no : '']);
+        s = await openSessionOf(tx, tb.id);
+        if (!s || s.id !== ins[0].id) throw new Error('حاول تاني');
+      } else if (!s.customer_id && me) {
+        await tx.unsafe('update cakeshop.mc_shop_table_sessions set customer_id = $2, customer_name = $3, customer_phone = $4, member_no = $5 where id = $1', [s.id, me.customer_id, me.name, me.phone, me.member_no]);
+        await tx.unsafe("update cakeshop.mc_shop_orders set customer_id = $2, customer_name = $3, customer_phone = $4, member_no = $5 where session_id = $1 and customer_id = ''", [s.id, me.customer_id, me.name, me.phone, me.member_no]);
+        s = await openSessionOf(tx, tb.id);
+      }
+      const c = await sessionCustomer(tx, s);
+      custToken = c ? c.access_token : '';
+      const qt = await quote(tx, c || { customer_id: '', name: '', phone: '', member_no: '' }, { items: p.items, delivery: 'pickup' }, false, c ? await birthdayOffer(ctx, c.access_token) : null);
+      const badLine = qt.lines.find((l) => l.error);
+      if (badLine) { const e = new Error((badLine.name ? badLine.name + ': ' : '') + badLine.error); e.quote = qt; throw e; }
+      const total = money2(qt.total - qt.shipping);
+      if (p.expect_total !== undefined && p.expect_total !== null && money2(p.expect_total) !== total) throw new Error('الأسعار اتغيرت. راجع الإجمالي الجديد وأكد تاني.');
+      const items = qt.lines.map((l) => ({ product_id: l.product_id, name: l.name, code: l.code, color: l.color, variant: l.variant, qty: l.qty,
+        unit_price: l.unit_price, old_price: l.old_price, line_subtotal: l.line_subtotal, line_discount: l.line_discount, line_total: l.line_total, points: !!l.points }));
+      const first = items[0];
+      const title = first.name + (items.length > 1 ? ' + ' + (items.length - 1) + ' منتج تاني' : '');
+      const hist = JSON.stringify([{ s: 'pending', at: new Date().toISOString(), by: 'ترابيزة ' + tb.name }]);
+      const [o] = await tx.unsafe(`insert into cakeshop.mc_shop_orders (order_no, customer_id, customer_name, customer_phone, member_no, product_id, product_name, product_code,
+          color, variant, qty, unit_price, total, notes, status, history, items, subtotal, product_discount, promo_discount, shipping, method, delivery,
+          birthday_discount, points_amount, table_id, table_name, session_id)
+        values (nextval('cakeshop.mc_shop_order_no'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14::text::jsonb, $15::text::jsonb,
+          $16, $17, 0, 0, 'table', 'dinein', $18, $19, $20, $21, $22) returning id, order_no`,
+        [c ? c.customer_id : '', c ? c.name : '', c ? c.phone : '', c ? c.member_no : '', first.product_id, title, first.code || '', first.color, first.variant,
+          items.reduce((a, i) => a + i.qty, 0), first.unit_price, total, notes, hist, JSON.stringify(items), qt.subtotal, qt.product_discount,
+          qt.birthday_discount, qt.points_amount, tb.id, tb.name, s.id]);
+      await tx.unsafe('update cakeshop.mc_shop_table_sessions set orders_count = orders_count + 1 where id = $1', [s.id]);
+      return { id: o.id, order_no: Number(o.order_no), total, birthday_discount: qt.birthday_discount };
+    });
+    if (r.birthday_discount > 0 && custToken && ctx && ctx.publicApi) {
+      try { await ctx.publicApi('_bdayUse', { token: custToken, invoice_no: invoiceForOrder(r.order_no), discount: r.birthday_discount }); } catch (e) { console.error(e); }
+    }
+    return r;
+  }
+  if (action === 'tableHelp') {
+    const kind = HELP_KINDS[T(p.kind)] ? T(p.kind) : 'help';
+    const s = await openSessionOf(sql, tb.id);
+    const ex = await sql.unsafe("select id from cakeshop.mc_shop_table_help where table_id = $1 and kind = $2 and status = 'open'", [tb.id, kind]);
+    if (!ex.length) {
+      const [h] = await sql.unsafe('insert into cakeshop.mc_shop_table_help (table_id, table_name, session_id, kind) values ($1, $2, $3, $4) returning id', [tb.id, tb.name, s ? s.id : null, kind]);
+      await sql.unsafe(`insert into cakeshop.mc_shop_notifications (kind, title, body, ref_type, ref_id, dedupe_key)
+        values ('table_help', $1, $2, 'table', $3, $4) on conflict (dedupe_key) do nothing`,
+        ['🔴 ' + tb.name + ': ' + HELP_KINDS[kind], 'الترابيزة محتاجة حد من فريق المحل', tb.id, 'help:' + h.id]);
+    }
+    return { done: true };
+  }
+  throw new Error('طلب غير معروف');
+}
+
+// ---------- الإدارة ----------
+async function tablesOverview(sql) {
+  const [r] = await sql.unsafe(`select json_build_object(
+    'tables', (select coalesce(json_agg(x order by x.sort, x.created_at), '[]') from (
+      select t.id, t.name, t.seats, t.active, t.qr_key, t.sort, t.created_at,
+        (select row_to_json(s) from (select s.id, s.session_no, s.opened_at, s.customer_name, s.member_no, s.payment_status,
+           (select count(*) from cakeshop.mc_shop_orders o where o.session_id = s.id and o.status <> 'cancelled') as orders,
+           (select count(*) from cakeshop.mc_shop_orders o where o.session_id = s.id and o.status = 'pending') as pending,
+           (select count(*) from cakeshop.mc_shop_orders o where o.session_id = s.id and o.status in ('approved','preparing','ready')) as active,
+           (select coalesce(sum(o.total), 0) from cakeshop.mc_shop_orders o where o.session_id = s.id and o.status <> 'cancelled') as total
+          from cakeshop.mc_shop_table_sessions s where s.table_id = t.id and s.status = 'open') s) as session,
+        (select coalesce(json_agg(json_build_object('id', h.id, 'kind', h.kind, 'created_at', h.created_at) order by h.id), '[]')
+           from cakeshop.mc_shop_table_help h where h.table_id = t.id and h.status = 'open') as help
+      from cakeshop.mc_shop_tables t) x),
+    'orders', (select json_build_object(
+       'total', count(*) filter (where status not in ('completed','cancelled','rejected')),
+       'new', count(*) filter (where status = 'pending'),
+       'preparing', count(*) filter (where status in ('approved','preparing')),
+       'ready', count(*) filter (where status = 'ready'))
+      from cakeshop.mc_shop_orders where delivery = 'dinein'),
+    'sales_today', (select coalesce(sum(total), 0) from cakeshop.mc_shop_table_sessions
+      where status = 'closed' and (closed_at at time zone 'Africa/Cairo')::date = (now() at time zone 'Africa/Cairo')::date),
+    'sales_total', (select coalesce(sum(total), 0) from cakeshop.mc_shop_table_sessions where status = 'closed'),
+    'base_url', (select value from cakeshop.mc_settings where key = 'public_base_url')
+  ) as data`);
+  const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  d.tables.forEach((t) => {
+    t.help = (t.help || []).map((h) => Object.assign(h, { label: HELP_KINDS[h.kind] || h.kind }));
+    const s = t.session;
+    t.status = !t.active ? 'disabled' : t.help.length ? 'attention' : s && Number(s.pending) > 0 ? 'pending' : s ? 'occupied' : 'available';
+    if (s) ['session_no', 'orders', 'pending', 'active', 'total'].forEach((k) => { s[k] = Number(s[k]); });
+  });
+  const act = d.tables.filter((t) => t.active);
+  d.kpi = { total: d.tables.length, available: act.filter((t) => t.status === 'available').length, occupied: act.filter((t) => t.session).length,
+    attention: act.filter((t) => t.status === 'attention').length, orders: d.orders, sales_today: Number(d.sales_today), sales_total: Number(d.sales_total) };
+  return d;
+}
+async function sessionTotals(ctx, token, s, orders) {
+  const live = orders.filter((o) => o.status !== 'cancelled' && o.status !== 'rejected');
+  const t = { orders_count: live.length, subtotal: money2(live.reduce((a, o) => a + Number(o.subtotal || 0), 0)),
+    discount: money2(live.reduce((a, o) => a + Number(o.product_discount || 0) + Number(o.promo_discount || 0) + Number(o.birthday_discount || 0), 0)),
+    total: money2(live.reduce((a, o) => a + Number(o.total || 0), 0)),
+    points_amount: money2(live.reduce((a, o) => a + (o.points_amount === null || o.points_amount === undefined ? Number(o.total || 0) : Number(o.points_amount)), 0)), points: null };
+  t.points_amount = Math.min(t.points_amount, t.total);
+  if (s.customer_id && t.total > 0 && s.status === 'open') { // النقاط المتوقعة من نفس قواعد برنامج الولاء
+    try {
+      const q = await ctx.adminApi(token, 'quote', { customer_id: s.customer_id, amount: t.total, points_amount: t.points_amount, category: '' }, '');
+      if (q && q.ok) t.points = Number(q.data.points_earned || 0);
+    } catch (e) { /* ignore */ }
+  }
+  return t;
+}
+async function sessionDetails(ctx, token, sessionId) {
+  const { sql } = ctx;
+  const r = await sql.unsafe(`select ${SESSION_COLS} from cakeshop.mc_shop_table_sessions s where s.id = $1`, [sessionId]);
+  if (!r.length) throw new Error('الجلسة غير موجودة');
+  const s = fixSession(r[0]);
+  const orders = (await sessionOrders(sql, s.id)).map((o) => Object.assign(o, { next: DINE_NEXT[o.status] || [] }));
+  const help = (await sql.unsafe('select id, kind, status, created_at, done_at, done_by from cakeshop.mc_shop_table_help where session_id = $1 or (table_id = $2 and status = \'open\') order by id', [s.id, s.table_id]))
+    .map((h) => Object.assign(h, { id: Number(h.id), label: HELP_KINDS[h.kind] || h.kind }));
+  return { session: s, orders, help, totals: s.status === 'open' ? await sessionTotals(ctx, token, s, orders) : { orders_count: s.orders_count, subtotal: s.subtotal, discount: s.discount, total: s.total, points_amount: s.points_amount, points: s.points_awarded } };
+}
+async function invoiceSession(ctx, token, id) {
+  const { sql } = ctx;
+  const cl = await sql.unsafe(`update cakeshop.mc_shop_table_sessions set invoice_status = 'working', invoice_error = ''
+    where id = $1 and status = 'closed' and customer_id <> '' and invoice_no = '' and invoice_status in ('none', 'failed') and total > 0
+    returning session_no, customer_id, total, points_amount, table_name`, [id]);
+  if (!cl.length) return { ok: true, skipped: true };
+  const s = cl[0], invNo = invoiceForSession(Number(s.session_no));
+  try {
+    const ex = await sql.unsafe("select txn_id, points_earned from cakeshop.mc_transactions where invoice_no = $1 and customer_id = $2 and status <> 'void' limit 1", [invNo, s.customer_id]);
+    let points;
+    if (ex.length) points = Number(ex[0].points_earned || 0);
+    else {
+      const r = await ctx.adminApi(token, 'checkout', { customer_id: s.customer_id, invoice_no: invNo, amount: money2(s.total), points_amount: money2(Math.min(Number(s.points_amount), Number(s.total))), category: '' }, 'tb-' + id + '-' + Date.now());
+      if (!r || !r.ok) throw new Error((r && r.error) || 'تعذر إنشاء الفاتورة');
+      points = Number((r.data.quote && r.data.quote.points_earned) || 0);
+      await sql.unsafe("update cakeshop.mc_pointsledger set reason = $3 where customer_id = $1 and ref_id = $2 and type = 'EARN'",
+        [s.customer_id, r.data.txn_id, 'Dine-in Reward – ' + s.table_name + ' #' + s.session_no]);
+    }
+    await sql.unsafe("update cakeshop.mc_shop_table_sessions set invoice_status = 'done', invoice_no = $2, points_awarded = $3 where id = $1", [id, invNo, points]);
+    if (points > 0) await sql.unsafe(`insert into cakeshop.mc_shop_customer_notes (customer_id, title, body, ref_type, ref_id, dedupe_key)
+      values ($1, $2, $3, 'table', $4, $5) on conflict (dedupe_key) do nothing`,
+      [s.customer_id, '🎉 كسبت ' + points + ' نقطة!', 'اتضافلك ' + points + ' نقطة على طلبك من ' + s.table_name + '. بالهنا والشفا 🍰', id, 'tb-done:' + id]);
+    return { ok: true, invoice_no: invNo, points };
+  } catch (e) {
+    const msg = e && /[؀-ۿ]/.test(String(e.message)) ? e.message : 'حدث خطأ أثناء إنشاء الفاتورة';
+    await sql.unsafe("update cakeshop.mc_shop_table_sessions set invoice_status = 'failed', invoice_error = $2 where id = $1", [id, msg.slice(0, 300)]);
+    return { ok: false, error: msg };
+  }
+}
+async function linkSessionCustomer(sql, sessionId, c) {
+  await sql.unsafe("update cakeshop.mc_shop_table_sessions set customer_id = $2, customer_name = $3, customer_phone = $4, member_no = $5 where id = $1 and status = 'open'", [sessionId, c.customer_id, c.name, c.phone, c.member_no]);
+  await sql.unsafe('update cakeshop.mc_shop_orders set customer_id = $2, customer_name = $3, customer_phone = $4, member_no = $5 where session_id = $1', [sessionId, c.customer_id, c.name, c.phone, c.member_no]);
+}
+
+export const TABLE_STAFF_ACTIONS = ['tables', 'tableSession', 'tableOrders', 'tableHelpDone', 'tableLinkCustomer', 'tableClose', 'tableRetryInvoice', 'tableHistory'];
+export const TABLE_OWNER_ACTIONS = ['saveTable', 'deleteTable'];
+async function tablesAdmin(ctx, token, user, action, p) {
+  const { sql } = ctx;
+  if (action === 'tables') return tablesOverview(sql);
+  if (action === 'saveTable') {
+    const name = T(p.name).slice(0, 40);
+    if (!name) throw new Error('اكتب رقم أو اسم الترابيزة');
+    const seats = Math.floor(Number(p.seats));
+    if (!(seats >= 1 && seats <= 100)) throw new Error('عدد المقاعد لازم يكون من 1 لـ 100');
+    const dup = await sql.unsafe('select 1 from cakeshop.mc_shop_tables where lower(name) = lower($1) and id::text <> $2', [name, T(p.id)]);
+    if (dup.length) throw new Error('فيه ترابيزة بنفس الاسم');
+    if (p.id) {
+      if (!UUID.test(T(p.id))) throw new Error('الترابيزة غير موجودة');
+      const r = await sql.unsafe('update cakeshop.mc_shop_tables set name = $2, seats = $3, active = $4, updated_at = now() where id = $1 returning id', [T(p.id), name, seats, p.active !== false]);
+      if (!r.length) throw new Error('الترابيزة غير موجودة');
+      await sql.unsafe("update cakeshop.mc_shop_table_sessions set table_name = $2 where table_id = $1 and status = 'open'", [T(p.id), name]);
+      return { id: r[0].id };
+    }
+    const r = await sql.unsafe('insert into cakeshop.mc_shop_tables (name, seats, active, sort) values ($1, $2, $3, (select coalesce(max(sort), 0) + 1 from cakeshop.mc_shop_tables)) returning id', [name, seats, p.active !== false]);
+    return { id: r[0].id };
+  }
+  if (action === 'deleteTable') {
+    if (!UUID.test(T(p.id))) throw new Error('الترابيزة غير موجودة');
+    const [c] = await sql.unsafe('select count(*)::int n from cakeshop.mc_shop_table_sessions where table_id = $1', [T(p.id)]);
+    if (c.n > 0) throw new Error('الترابيزة دي عليها طلبات قديمة محفوظة في السجل، فمينفعش تتمسح. عطّلها بدل المسح.');
+    await sql.unsafe('delete from cakeshop.mc_shop_tables where id = $1', [T(p.id)]);
+    return { done: true };
+  }
+  if (action === 'tableSession') {
+    let sid = T(p.session_id);
+    if (!sid && UUID.test(T(p.table_id))) { const s = await openSessionOf(sql, T(p.table_id)); sid = s ? s.id : ''; }
+    if (!UUID.test(sid)) return { session: null };
+    return sessionDetails(ctx, token, sid);
+  }
+  if (action === 'tableOrders') {
+    const rows = await sql.unsafe(`select ${ORDER_COLS}, o.table_name, o.session_id, o.points_amount from cakeshop.mc_shop_orders o where o.delivery = 'dinein' order by o.created_at desc limit 500`);
+    const list = await withImages(sql, rows);
+    return list.map((o, i) => Object.assign(o, { table_name: rows[i].table_name, session_id: rows[i].session_id, customer_name: rows[i].customer_name, member_no: rows[i].member_no,
+      history: Array.isArray(rows[i].history) ? rows[i].history : [], next: DINE_NEXT[rows[i].status] || [], can_override: user.role === 'owner' }));
+  }
+  if (action === 'tableHistory') {
+    const rows = await sql.unsafe(`select ${SESSION_COLS} from cakeshop.mc_shop_table_sessions s where s.status = 'closed' order by s.closed_at desc limit 300`);
+    return rows.map(fixSession);
+  }
+  if (action === 'tableHelpDone') {
+    const id = Number(p.id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('الطلب غير موجود');
+    await sql.unsafe("update cakeshop.mc_shop_table_help set status = 'done', done_at = now(), done_by = $2 where id = $1 and status = 'open'", [id, user.name || '']);
+    await sql.unsafe("update cakeshop.mc_shop_notifications set read_at = coalesce(read_at, now()), read_by = case when read_at is null then $2 else read_by end where dedupe_key = $1", ['help:' + id, user.name || '']);
+    return { done: true };
+  }
+  if (action === 'tableLinkCustomer') {
+    if (!UUID.test(T(p.session_id))) throw new Error('الجلسة غير موجودة');
+    const lk = await ctx.adminApi(token, 'lookup', { q: T(p.q) }, '');
+    if (!lk || !lk.ok) throw new Error((lk && lk.error) || 'لم يتم العثور على العميل');
+    const c = lk.data.customer;
+    const s = await sql.unsafe("select id from cakeshop.mc_shop_table_sessions where id = $1 and status = 'open'", [T(p.session_id)]);
+    if (!s.length) throw new Error('الجلسة دي اتقفلت');
+    await linkSessionCustomer(sql, T(p.session_id), { customer_id: c.customer_id, name: c.name || '', phone: c.phone || '', member_no: c.member_no || '' });
+    return sessionDetails(ctx, token, T(p.session_id));
+  }
+  if (action === 'tableClose') {
+    const sid = T(p.session_id);
+    if (!UUID.test(sid)) throw new Error('الجلسة غير موجودة');
+    const pay = p.payment_status === 'paid' ? 'paid' : 'unpaid';
+    await sql.begin(async (tx) => {
+      await tx.unsafe("select set_config('cakeshop.actor', $1, true)", [user.name || 'الإدارة']);
+      const r = await tx.unsafe("select id, status from cakeshop.mc_shop_table_sessions where id = $1 for update", [sid]);
+      if (!r.length) throw new Error('الجلسة غير موجودة');
+      if (r[0].status !== 'open') throw new Error('الترابيزة دي اتقفلت قبل كده');
+      const open = await tx.unsafe("select order_no, status from cakeshop.mc_shop_orders where session_id = $1 and status in ('pending','approved','preparing','ready') order by order_no", [sid]);
+      if (open.length) throw new Error('فيه طلبات لسه ما اتقدمتش (' + open.map((o) => '#' + o.order_no + ' ' + (ST_AR[o.status] || o.status)).join('، ') + '). قدّمها أو الغيها الأول.');
+      // الطلبات اللي اتقدمت تتقفل «مكتمل» (والمخزون بيتخصم تلقائياً)
+      const at = new Date().toISOString();
+      await tx.unsafe(`update cakeshop.mc_shop_orders set status = 'completed', completed_at = coalesce(completed_at, now()), updated_at = now(),
+        history = history || $2::text::jsonb where session_id = $1 and status = 'served'`, [sid, JSON.stringify([{ s: 'completed', at, by: user.name || '', from: 'served' }])]);
+      const t = (await tx.unsafe(`select count(*) filter (where status <> 'cancelled')::int n, coalesce(sum(subtotal) filter (where status <> 'cancelled'), 0) sub,
+          coalesce(sum(product_discount + promo_discount + birthday_discount) filter (where status <> 'cancelled'), 0) disc,
+          coalesce(sum(total) filter (where status <> 'cancelled'), 0) tot, coalesce(sum(coalesce(points_amount, total)) filter (where status <> 'cancelled'), 0) pts
+        from cakeshop.mc_shop_orders where session_id = $1`, [sid]))[0];
+      await tx.unsafe(`update cakeshop.mc_shop_table_sessions set status = 'closed', closed_at = now(), closed_by = $2, payment_status = $3,
+        orders_count = $4, subtotal = $5, discount = $6, total = $7, points_amount = least($8::numeric, $7::numeric) where id = $1`,
+        [sid, user.name || '', pay, t.n, t.sub, t.disc, t.tot, t.pts]);
+      await tx.unsafe("update cakeshop.mc_shop_table_help set status = 'done', done_at = now(), done_by = $2 where session_id = $1 and status = 'open'", [sid, user.name || '']);
+    });
+    const inv = await invoiceSession(ctx, token, sid);
+    const d = await sessionDetails(ctx, token, sid);
+    d.invoice = inv;
+    return d;
+  }
+  if (action === 'tableRetryInvoice') {
+    const sid = T(p.session_id);
+    if (!UUID.test(sid)) throw new Error('الجلسة غير موجودة');
+    const inv = await invoiceSession(ctx, token, sid);
+    if (!inv.ok) throw new Error(inv.error);
+    return sessionDetails(ctx, token, sid);
+  }
+  throw new Error('طلب غير معروف');
 }

@@ -772,7 +772,9 @@
       b.onclick = function () {
         var n = d.items.filter(function (x) { return String(x.id) === b.dataset.nid; })[0]; if (!n) return;
         if (!n.read_at) sh('readNotifications', { ids: [n.id] }).then(refreshBell).catch(function () { });
-        if (n.ref_type === 'order' && n.ref_id) openOrder(n.ref_id);
+        if (n.ref_type === 'order' && /Dine-in/.test(n.body || '')) { closeModal(); go('tableorders'); }
+        else if (n.ref_type === 'table') { closeModal(); go('tables'); }
+        else if (n.ref_type === 'order' && n.ref_id) openOrder(n.ref_id);
         else if (n.kind === 'birthday') { closeModal(); go('birthdays'); }
       };
     });
