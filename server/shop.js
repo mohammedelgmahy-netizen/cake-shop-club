@@ -1058,14 +1058,26 @@ async function sessionDetails(ctx, token, sessionId) {
     .map((h) => Object.assign(h, { id: Number(h.id), label: HELP_KINDS[h.kind] || h.kind }));
   return { session: s, orders, help, totals: s.status === 'open' ? await sessionTotals(ctx, token, s, orders) : { orders_count: s.orders_count, subtotal: s.subtotal, discount: s.discount, total: s.total, points_amount: s.points_amount, points: s.points_awarded } };
 }
-async function invoiceSession(ctx, token, id) {
+async function invoiceSession(ctx, token, id, user) {
   const { sql } = ctx;
   const cl = await sql.unsafe(`update cakeshop.mc_shop_table_sessions set invoice_status = 'working', invoice_error = ''
-    where id = $1 and status = 'closed' and customer_id <> '' and invoice_no = '' and invoice_status in ('none', 'failed') and total > 0
-    returning session_no, customer_id, total, points_amount, table_name`, [id]);
+    where id = $1 and status = 'closed' and invoice_no = '' and invoice_status in ('none', 'failed') and total > 0
+    returning session_no, customer_id, total, discount, subtotal, points_amount, table_name, closed_by`, [id]);
   if (!cl.length) return { ok: true, skipped: true };
   const s = cl[0], invNo = invoiceForSession(Number(s.session_no));
   try {
+    if (!s.customer_id) { // عميل مش مسجل: الفاتورة بتتسجل في المبيعات من غير عميل ومن غير نقاط
+      const ex = await sql.unsafe("select 1 from cakeshop.mc_transactions where invoice_no = $1 and customer_id = '' and status <> 'void' limit 1", [invNo]);
+      if (!ex.length) {
+        await sql.unsafe(`insert into cakeshop.mc_transactions (txn_id, invoice_key, invoice_no, customer_id, member_no, amount, discount_amount, net_amount, category,
+            eligible_amount, points_earned, employee_name, branch_id, status, created_at)
+          select 'T-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12)), coalesce(b.branch_id, '') || '|' || $1, $1, '', '', $2, 0, $2, '', 0, 0, $3, coalesce(b.branch_id, ''), 'valid', now()
+          from (select 1) x left join lateral (select branch_id from cakeshop.mc_branches where active is true order by name limit 1) b on true`,
+          [invNo, money2(s.total), (user && user.name) || s.closed_by || '']);
+      }
+      await sql.unsafe("update cakeshop.mc_shop_table_sessions set invoice_status = 'done', invoice_no = $2, points_awarded = 0 where id = $1", [id, invNo]);
+      return { ok: true, invoice_no: invNo, points: 0 };
+    }
     const ex = await sql.unsafe("select txn_id, points_earned from cakeshop.mc_transactions where invoice_no = $1 and customer_id = $2 and status <> 'void' limit 1", [invNo, s.customer_id]);
     let points;
     if (ex.length) points = Number(ex[0].points_earned || 0);
@@ -1178,7 +1190,7 @@ async function tablesAdmin(ctx, token, user, action, p) {
         [sid, user.name || '', pay, t.n, t.sub, t.disc, t.tot, t.pts]);
       await tx.unsafe("update cakeshop.mc_shop_table_help set status = 'done', done_at = now(), done_by = $2 where session_id = $1 and status = 'open'", [sid, user.name || '']);
     });
-    const inv = await invoiceSession(ctx, token, sid);
+    const inv = await invoiceSession(ctx, token, sid, user);
     const d = await sessionDetails(ctx, token, sid);
     d.invoice = inv;
     return d;
@@ -1186,7 +1198,7 @@ async function tablesAdmin(ctx, token, user, action, p) {
   if (action === 'tableRetryInvoice') {
     const sid = T(p.session_id);
     if (!UUID.test(sid)) throw new Error('الجلسة غير موجودة');
-    const inv = await invoiceSession(ctx, token, sid);
+    const inv = await invoiceSession(ctx, token, sid, user);
     if (!inv.ok) throw new Error(inv.error);
     return sessionDetails(ctx, token, sid);
   }
