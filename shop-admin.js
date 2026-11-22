@@ -254,6 +254,10 @@
       '<label>التفاصيل <span class="muted small">(زي عدد الأفراد، الوزن، المكونات)</span></label><div class="sp-rows" id="pfSpecs"></div><button class="btn ghost sm" type="button" id="pfSpecAdd">+ إضافة تفصيلة</button>' +
       '<label>النكهات المتاحة <span class="muted small">(اختار لون يعبر عن النكهة واكتب اسمها)</span></label><div class="sp-rows" id="pfColors"></div><button class="btn ghost sm" type="button" id="pfColAdd">+ إضافة نكهة</button>' +
       '<label>الأحجام المتاحة <span class="muted small">(مثلاً الحجم: صغير، وسط، كبير — افصل بينهم بفاصلة)</span></label><input id="pfVar" value="' + esc((p.variants || []).join('، ')) + '">' +
+      '<label>احتساب نقاط الولاء</label><div id="pfPtsW"></div>' +
+      '<label>السماح بالعروض العامة <span class="muted small">(أكواد الخصم العامة وعرض عيد الميلاد)</span></label><div id="pfGenW"></div>' +
+      '<label>السماح بالعروض الخاصة <span class="muted small">(خصم المنتج نفسه «السعر قبل الخصم»، وأكواد الخصم المخصصة للمنتج أو قسمه)</span></label><div id="pfSpecW"></div>' +
+      '<p class="muted small" style="margin:4px 0 0">إعداد المنتج له الأولوية على إعداد القسم. «حسب القسم» ياخد إعداد القسم.</p>' +
       '<label>المخزون</label><label class="check"><input type="checkbox" id="pfTrack"' + (p.track_stock ? ' checked' : '') + '><span>تتبع الكمية في المخزون <span class="muted small">(الطلب بيحجز الكمية، والإلغاء بيرجعها، والإتمام بيخصمها)</span></span></label>' +
       '<div id="pfLowW"><label>حد التنبيه للمخزون المنخفض <span class="muted small">(لما المتاح من أي نكهة/حجم يوصل للرقم ده أو أقل، المنتج يتعلّم «مخزون منخفض»)</span></label><input id="pfLow" type="number" min="0" step="1" inputmode="numeric" value="' + (p.low_stock_at === undefined || p.low_stock_at === null ? 3 : Number(p.low_stock_at)) + '" style="max-width:140px"></div>' +
       '<div id="pfStock"></div>' +
@@ -348,6 +352,15 @@
     function lowVis() { $('#pfLowW').style.display = $('#pfTrack').checked ? '' : 'none'; }
     lowVis();
     $('#pfTrack').onchange = function () { lowVis(); drawStock(); }; $('#pfVar').onchange = drawStock;
+    var RM = { pfPts: [p.points_mode, 'points_enabled'], pfGen: [p.general_offers_mode, 'general_offers'], pfSpec: [p.special_offers_mode, 'special_offers'] };
+    function drawRules() {
+      var cat = SD.categories.filter(function (c) { return c.id === $('#pfCat').value; })[0];
+      Object.keys(RM).forEach(function (id) {
+        var cur = $('#' + id) ? $('#' + id).value : RM[id][0];
+        $('#' + id + 'W').innerHTML = modeSel(id, cur, cat ? cat[RM[id][1]] !== false : true);
+      });
+    }
+    drawRules(); $('#pfCat').addEventListener('change', drawRules);
     $('#pfSpecAdd').onclick = function () { SP.push(['', '']); drawSpecs(); var a = $all('[data-sk]', body); a[a.length - 1].focus(); };
     $('#pfColAdd').onclick = function () { CO.push({ n: '', c: '#000000' }); drawColors(); var a = $all('[data-cn]', body); a[a.length - 1].focus(); };
     $('#pfSave').onclick = function () {
@@ -357,6 +370,7 @@
         price: numVal($('#pfPrice')), old_price: numVal($('#pfOld')), available: $('#pfAv').checked, hidden: !$('#pfVis').checked,
         images: IM, specs: SP.filter(function (s) { return String(s[0]).trim() || String(s[1]).trim(); }), colors: CO.filter(function (c) { return String(c.n).trim(); }),
         variants: $('#pfVar').value.split(/[,،\n]/).map(function (s) { return s.trim(); }).filter(Boolean),
+        points_mode: $('#pfPts').value, general_offers_mode: $('#pfGen').value, special_offers_mode: $('#pfSpec').value,
         track_stock: $('#pfTrack').checked, low_stock_at: Math.max(0, Math.floor(numVal($('#pfLow'))) || 0),
         stock: $('#pfTrack').checked ? stockKeys().map(function (k) { return { key: k, physical: ST[k] ? ST[k].physical : 0 }; }) : [],
         stock_note: $('#pfStNote') ? $('#pfStNote').value : ''
@@ -402,6 +416,13 @@
     });
     $all('[data-ce]', el).forEach(function (b) { b.onclick = function () { catForm(C[+b.dataset.ce]); }; });
   }
+  // اختيار نعم / لا (وللمنتج: «حسب القسم» كمان)
+  function ynSel(id, on) { return '<select id="' + id + '"><option value="yes"' + (on ? ' selected' : '') + '>نعم</option><option value="no"' + (on ? '' : ' selected') + '>لا</option></select>'; }
+  function modeSel(id, mode, catOn) {
+    mode = mode === 'yes' || mode === 'no' ? mode : 'inherit';
+    return '<select id="' + id + '"><option value="inherit"' + (mode === 'inherit' ? ' selected' : '') + '>حسب القسم' + (catOn === null ? '' : ' (' + (catOn ? 'نعم' : 'لا') + ')') + '</option>' +
+      '<option value="yes"' + (mode === 'yes' ? ' selected' : '') + '>نعم</option><option value="no"' + (mode === 'no' ? ' selected' : '') + '>لا</option></select>';
+  }
   function catForm(c) {
     var isNew = !c; c = c || { name: '', icon: '', image: '', hidden: false };
     var IMG = c.image || '';
@@ -410,6 +431,9 @@
       '<label>أيقونة (إيموجي)</label><input id="cfIcon" value="' + esc(c.icon) + '" placeholder="مثلاً 🎂" maxlength="16" style="font-size:22px">' +
       '<label>أو صورة للقسم <span class="muted small">(لو حطيت صورة بتظهر بدل الأيقونة)</span></label><div class="sp-imgs" id="cfImg"></div>' +
       '<label class="check"><input type="checkbox" id="cfVis"' + (c.hidden ? '' : ' checked') + '><span>ظاهر للعملاء</span></label>' +
+      '<label>احتساب نقاط الولاء</label>' + ynSel('cfPts', c.points_enabled !== false) +
+      '<label>السماح بالعروض العامة <span class="muted small">(أكواد الخصم العامة وعرض عيد الميلاد)</span></label>' + ynSel('cfGen', c.general_offers !== false) +
+      '<label>السماح بالعروض الخاصة <span class="muted small">(خصم المنتج نفسه، وأكواد الخصم المخصصة لمنتجات أو أقسام معينة)</span></label>' + ynSel('cfSpec', c.special_offers !== false) +
       '<div id="cfErr"></div><div class="row" style="margin-top:10px"><button class="btn" id="cfSave" type="button">حفظ القسم</button>' +
       (isNew ? '' : '<button class="btn ghost" id="cfDel" type="button" style="flex:0 0 auto;color:#DC2626">مسح</button>') + '</div>');
     function drawImg() {
@@ -426,7 +450,8 @@
     drawImg();
     $('#cfSave').onclick = function () {
       var btn = this; busy(btn, true); $('#cfErr').innerHTML = '';
-      sh('saveCategory', { id: c.id || '', name: $('#cfName').value, icon: $('#cfIcon').value, image: IMG, hidden: !$('#cfVis').checked })
+      sh('saveCategory', { id: c.id || '', name: $('#cfName').value, icon: $('#cfIcon').value, image: IMG, hidden: !$('#cfVis').checked,
+        points_enabled: $('#cfPts').value === 'yes', general_offers: $('#cfGen').value === 'yes', special_offers: $('#cfSpec').value === 'yes' })
         .then(function () { closeModal(); toast('تم حفظ القسم ✓'); return reload(); })
         .catch(function (e) { $('#cfErr').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }).then(function () { busy(btn, false); });
     };

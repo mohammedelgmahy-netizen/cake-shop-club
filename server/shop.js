@@ -73,21 +73,37 @@ function cleanStock(list, v) {
   return out;
 }
 
-const PRODUCT_COLS = 'id, code, category_id, name, description, price, old_price, available, hidden, images, specs, colors, variants, created_at, updated_at, track_stock, low_stock_at';
+const PRODUCT_COLS = 'id, code, category_id, name, description, price, old_price, available, hidden, images, specs, colors, variants, created_at, updated_at, track_stock, low_stock_at, points_mode, general_offers_mode, special_offers_mode';
 // المتاح لكل اختيار (النكهة|الحجم) للمنتجات اللي عليها تتبع مخزون: المتاح = الفعلي − المحجوز
 const STOCK_AVAIL = `case when p.track_stock then (select coalesce(json_object_agg(s.key, greatest(s.physical - s.reserved, 0)), '{}'::json) from cakeshop.mc_shop_stock s where s.product_id = p.id) end as stock`;
 const STOCK_FULL = `(select coalesce(json_agg(json_build_object('key', s.key, 'physical', s.physical, 'reserved', s.reserved, 'available', greatest(s.physical - s.reserved, 0)) order by s.key), '[]'::json) from cakeshop.mc_shop_stock s where s.product_id = p.id) as stock`;
 export const stockKey = (color, variant) => T(color) + '|' + T(variant);
-const CATEGORY_COLS = 'id, name, icon, image, sort, hidden';
+const CATEGORY_COLS = 'id, name, icon, image, sort, hidden, points_enabled, general_offers, special_offers';
+// إعداد المنتج ليه الأولوية: نعم / لا، و«حسب القسم» ياخد إعداد القسم
+export const ruleOf = (mode, catVal) => (mode === 'yes' ? true : mode === 'no' ? false : catVal !== false);
+const RULE_COLS = `coalesce((select k.points_enabled from cakeshop.mc_shop_categories k where k.id = p.category_id), true) as c_points,
+  coalesce((select k.general_offers from cakeshop.mc_shop_categories k where k.id = p.category_id), true) as c_gen,
+  coalesce((select k.special_offers from cakeshop.mc_shop_categories k where k.id = p.category_id), true) as c_spec`;
+function applyRules(pr) {
+  pr.points = ruleOf(pr.points_mode, pr.c_points);
+  pr.general_offers = ruleOf(pr.general_offers_mode, pr.c_gen);
+  pr.special_offers = ruleOf(pr.special_offers_mode, pr.c_spec);
+  // المنتج مش مسموح له بالعروض الخاصة: يتباع بسعره الأصلي من غير خصم المنتج
+  if (!pr.special_offers && Number(pr.old_price) > Number(pr.price)) { pr.price = Number(pr.old_price); pr.old_price = 0; }
+  delete pr.c_points; delete pr.c_gen; delete pr.c_spec;
+  return pr;
+}
 
 async function catalog(sql) {
   const [r] = await sql.unsafe(`select json_build_object(
     'categories', (select coalesce(json_agg(c order by c.sort, c.created_at), '[]') from (select ${CATEGORY_COLS}, created_at from cakeshop.mc_shop_categories where not hidden) c),
     'products', (select coalesce(json_agg(p order by p.created_at desc), '[]') from (
-      select ${PRODUCT_COLS}, ${STOCK_AVAIL} from cakeshop.mc_shop_products p
+      select ${PRODUCT_COLS}, ${STOCK_AVAIL}, ${RULE_COLS} from cakeshop.mc_shop_products p
       where not p.hidden and (p.category_id is null or p.category_id in (select id from cakeshop.mc_shop_categories where not hidden))) p)
   ) as data`);
-  return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  (d.products || []).forEach(applyRules);
+  return d;
 }
 
 
@@ -177,15 +193,16 @@ const dateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : d ? S
 async function quote(q, customer, p, lockPromo, bday) {
   const items = cleanItems(p.items);
   const ids = [...new Set(items.map((i) => i.product_id))];
-  const prods = await q.unsafe(`select p.id, p.name, p.code, p.price, p.old_price, p.available, p.hidden, p.colors, p.variants, p.category_id, p.track_stock, ${STOCK_AVAIL},
+  const prods = await q.unsafe(`select p.id, p.name, p.code, p.price, p.old_price, p.available, p.hidden, p.colors, p.variants, p.category_id, p.track_stock, ${STOCK_AVAIL}, p.points_mode, p.general_offers_mode, p.special_offers_mode, ${RULE_COLS},
       coalesce(p.images->0->>'t', p.images->0->>'u', '') as image,
       (p.category_id is null or exists (select 1 from cakeshop.mc_shop_categories k where k.id = p.category_id and not k.hidden)) as cat_ok
     from cakeshop.mc_shop_products p where p.id = any($1::uuid[])`, [ids]);
-  const byId = new Map(prods.map((r) => [r.id, r]));
+  const byId = new Map(prods.map((r) => [r.id, applyRules(r)]));
   const lines = items.map((it) => {
     const pr = byId.get(it.product_id);
     const line = { product_id: it.product_id, name: pr ? pr.name : '', code: pr ? pr.code || '' : '', image: pr ? pr.image : '', category_id: pr ? pr.category_id : null,
       color: it.color, variant: it.variant, qty: it.qty, unit_price: 0, old_price: 0, line_subtotal: 0, line_discount: 0, line_total: 0, error: '' };
+    if (pr) { line.points = pr.points; line.general_offers = pr.general_offers; line.special_offers = pr.special_offers; }
     if (!pr || pr.hidden || !pr.cat_ok) { line.error = 'المنتج ده مش متاح دلوقتي'; return line; }
     if (!pr.available) line.error = 'غير متوفر حالياً';
     const colors = (Array.isArray(pr.colors) ? pr.colors : []).map((x) => x && x.n);
@@ -230,7 +247,8 @@ async function quote(q, customer, p, lockPromo, bday) {
         where promo_id = $1 and status not in ('rejected','cancelled')`, [pr.id, customer.customer_id]);
       const pids = Array.isArray(pr.product_ids) ? pr.product_ids : [], cids = Array.isArray(pr.category_ids) ? pr.category_ids : [];
       const scoped = pids.length || cids.length;
-      let elig = good.filter((l) => !scoped || pids.indexOf(l.product_id) >= 0 || (l.category_id && cids.indexOf(l.category_id) >= 0));
+      // كود عام = عرض عام (للمنتجات المسموح لها بالعروض العامة)، كود لمنتجات أو أقسام معينة = عرض خاص (للمسموح لها بالعروض الخاصة)
+      let elig = good.filter((l) => (scoped ? l.special_offers : l.general_offers) && (!scoped || pids.indexOf(l.product_id) >= 0 || (l.category_id && cids.indexOf(l.category_id) >= 0)));
       if ((pr.max_uses > 0 && u.n >= pr.max_uses) || (pr.per_customer > 0 && u.mine >= pr.per_customer)) promo.message = 'تم الوصول إلى الحد الأقصى لاستخدام هذا الكود';
       else if (!elig.length) promo.message = 'هذا الكود غير متاح على المنتجات الموجودة في سلتك';
       else {
@@ -243,6 +261,7 @@ async function quote(q, customer, p, lockPromo, bday) {
           if (pr.kind === 'percent' && Number(pr.max_discount) > 0) d = Math.min(d, Number(pr.max_discount));
           d = money2(Math.min(d, base));
           promo.ok = true; promo.discount = d; promo.message = 'تم تطبيق كود الخصم بنجاح';
+          elig.forEach((l) => { l._promo = base > 0 ? d * l.line_total / base : 0; });
           promo.kind = pr.kind; promo.value = Number(pr.value);
         }
       }
@@ -253,21 +272,27 @@ async function quote(q, customer, p, lockPromo, bday) {
   let birthday = null, birthday_discount = 0;
   if (bday) {
     birthday = { type: bday.type, value: Number(bday.value) || 0, offer_text: bday.offer_text, end: bday.end, status: bday.status, discount: 0 };
-    const base = Math.max(0, items_total - promo_discount);
+    // عرض عيد الميلاد عرض عام: بيتحسب على المنتجات المسموح لها بالعروض العامة بس
+    const bl = good.filter((l) => l.general_offers);
+    const base = Math.max(0, bl.reduce((s, l) => s + l.line_total - (l._promo || 0), 0));
     if (bday.status === 'available' && base > 0 && (bday.type === 'percent' || bday.type === 'fixed')) {
       let d = bday.type === 'percent' ? base * Number(bday.value) / 100 : Number(bday.value);
       if (bday.type === 'percent' && Number(bday.max) > 0) d = Math.min(d, Number(bday.max));
       birthday_discount = birthday.discount = money2(Math.min(d, base));
+      bl.forEach((l) => { l._bday = birthday_discount * (l.line_total - (l._promo || 0)) / base; });
     }
   }
   const set = await shopSettings(q);
   const delivery = p.delivery === 'delivery' ? 'delivery' : 'pickup';
   const shipping = delivery === 'delivery' && set.delivery_enabled ? money2(set.delivery_fee) : 0;
   const total = money2(Math.max(0, items_total - promo_discount - birthday_discount) + shipping);
+  // المبلغ اللي بيتحسب عليه نقاط الولاء: المنتجات المسموح لها بالنقاط بس، بعد الخصومات
+  const points_amount = money2(Math.max(0, good.filter((l) => l.points).reduce((s, l) => s + l.line_total - (l._promo || 0) - (l._bday || 0), 0)));
+  lines.forEach((l) => { delete l._promo; delete l._bday; });
   const brs = await branches(q);
   return {
     branches: brs, saved_address: await savedAddress(q, customer.customer_id),
-    lines, subtotal, product_discount, items_total, promo, promo_discount, birthday, birthday_discount, delivery, shipping, total,
+    lines, subtotal, product_discount, items_total, promo, promo_discount, birthday, birthday_discount, delivery, shipping, total, points_amount,
     delivery_enabled: set.delivery_enabled, delivery_fee: set.delivery_fee,
     customer: { name: customer.name, phone: customer.phone, member_no: customer.member_no },
   };
@@ -298,19 +323,19 @@ async function checkout(sql, c, p, ctx) {
       const e = new Error('الأسعار اتغيرت. راجع الإجمالي الجديد وأكد تاني.'); e.quote = qt; throw e;
     }
     const items = qt.lines.map((l) => ({ product_id: l.product_id, name: l.name, code: l.code, color: l.color, variant: l.variant, qty: l.qty,
-      unit_price: l.unit_price, old_price: l.old_price, line_subtotal: l.line_subtotal, line_discount: l.line_discount, line_total: l.line_total }));
+      unit_price: l.unit_price, old_price: l.old_price, line_subtotal: l.line_subtotal, line_discount: l.line_discount, line_total: l.line_total, points: !!l.points }));
     const first = items[0];
     const qtySum = items.reduce((s, i) => s + i.qty, 0);
     const title = first.name + (items.length > 1 ? ' + ' + (items.length - 1) + ' منتج تاني' : '');
     const hist = JSON.stringify([{ s: 'pending', at: new Date().toISOString(), by: 'customer' }]);
     const [o] = await tx.unsafe(`insert into cakeshop.mc_shop_orders (order_no, customer_id, customer_name, customer_phone, member_no, product_id, product_name, product_code,
         color, variant, qty, unit_price, total, notes, status, history, items, subtotal, product_discount, promo_id, promo_code, promo_discount, shipping, method, delivery, address,
-        branch_id, branch_name, birthday_discount)
+        branch_id, branch_name, birthday_discount, points_amount)
       values (nextval('cakeshop.mc_shop_order_no'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14::text::jsonb, $15::text::jsonb,
-        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) returning id, order_no`,
+        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) returning id, order_no`,
       [c.customer_id, c.name, c.phone, c.member_no, first.product_id, title, first.code || '', first.color, first.variant, qtySum, first.unit_price, qt.total, notes, hist,
         JSON.stringify(items), qt.subtotal, qt.product_discount, qt.promo && qt.promo.ok ? qt.promo.id : null, qt.promo && qt.promo.ok ? qt.promo.code : '',
-        qt.promo_discount, qt.shipping, method, delivery, delivery === 'delivery' ? address : '', branch ? branch.id : '', branch ? branch.name : '', qt.birthday_discount]);
+        qt.promo_discount, qt.shipping, method, delivery, delivery === 'delivery' ? address : '', branch ? branch.id : '', branch ? branch.name : '', qt.birthday_discount, qt.points_amount]);
     return { id: o.id, order_no: Number(o.order_no), total: qt.total, birthday_discount: qt.birthday_discount };
   }).then(async (r) => {
     // تسجيل إن العميل استخدم عرض عيد الميلاد (مرة واحدة في دورة عيد الميلاد)
@@ -471,7 +496,7 @@ async function invoiceOrder(ctx, token, id) {
   // حجز المحاولة: محاولة واحدة بس في نفس الوقت، ومفيش فاتورة تانية لو اتعملت قبل كده
   const cl = await sql.unsafe(`update cakeshop.mc_shop_orders set invoice_status = 'working', invoice_error = ''
     where id = $1 and status = 'completed' and invoice_status in ('none', 'failed') and invoice_no = ''
-    returning order_no, customer_id, customer_name, total, shipping`, [id]);
+    returning order_no, customer_id, customer_name, total, shipping, points_amount`, [id]);
   if (!cl.length) {
     const r = await sql.unsafe('select invoice_status, invoice_no, points_awarded from cakeshop.mc_shop_orders where id = $1', [id]);
     if (r.length && r[0].invoice_no) return { ok: true, already: true, invoice_no: r[0].invoice_no, points: Number(r[0].points_awarded) };
@@ -494,7 +519,9 @@ async function invoiceOrder(ctx, token, id) {
       points = Number(ex[0].points_earned || 0);
     } else {
       if (!(amount > 0)) return await fail('قيمة الطلب صفر، مفيش فاتورة تتعمل');
-      const r = await ctx.adminApi(token, 'checkout', { customer_id: o.customer_id, invoice_no: invNo, amount, category: '' }, 'ord-' + id + '-' + Date.now());
+      const pay = { customer_id: o.customer_id, invoice_no: invNo, amount, category: '' };
+      if (o.points_amount !== null && o.points_amount !== undefined) pay.points_amount = money2(Math.min(Number(o.points_amount), amount));
+      const r = await ctx.adminApi(token, 'checkout', pay, 'ord-' + id + '-' + Date.now());
       if (!r || !r.ok) return await fail((r && r.error) || 'تعذر إنشاء الفاتورة');
       points = Number((r.data.quote && r.data.quote.points_earned) || 0);
       balance = Number(r.data.balance);
@@ -717,12 +744,12 @@ export async function handleShop(body, ctx) {
       if (dup.length) return bad('فيه قسم بنفس الاسم');
       if (p.id) {
         if (!UUID.test(T(p.id))) return bad('القسم غير موجود');
-        const r = await sql.unsafe('update cakeshop.mc_shop_categories set name=$1, icon=$2, image=$3, hidden=$4, updated_at=now() where id=$5 returning id', [name, icon, image, !!p.hidden, T(p.id)]);
+        const r = await sql.unsafe('update cakeshop.mc_shop_categories set name=$1, icon=$2, image=$3, hidden=$4, points_enabled=coalesce($6, points_enabled), general_offers=coalesce($7, general_offers), special_offers=coalesce($8, special_offers), updated_at=now() where id=$5 returning id', [name, icon, image, !!p.hidden, T(p.id), ...['points_enabled', 'general_offers', 'special_offers'].map((k) => (typeof p[k] === 'boolean' ? p[k] : null))]);
         if (!r.length) return bad('القسم غير موجود');
         return ok({ id: r[0].id });
       }
-      const r = await sql.unsafe(`insert into cakeshop.mc_shop_categories (name, icon, image, hidden, sort)
-        values ($1, $2, $3, $4, (select coalesce(max(sort), 0) + 1 from cakeshop.mc_shop_categories)) returning id`, [name, icon, image, !!p.hidden]);
+      const r = await sql.unsafe(`insert into cakeshop.mc_shop_categories (name, icon, image, hidden, sort, points_enabled, general_offers, special_offers)
+        values ($1, $2, $3, $4, (select coalesce(max(sort), 0) + 1 from cakeshop.mc_shop_categories), $5, $6, $7) returning id`, [name, icon, image, !!p.hidden, p.points_enabled !== false, p.general_offers !== false, p.special_offers !== false]);
       return ok({ id: r[0].id });
     }
 
@@ -755,6 +782,8 @@ export async function handleShop(body, ctx) {
       const vals = [v.name, v.category_id, v.description, v.price, v.old_price, v.available, v.hidden,
         JSON.stringify(v.images), JSON.stringify(v.specs), JSON.stringify(v.colors), JSON.stringify(v.variants)];
       const track = !!p.track_stock;
+      const mode = (x) => (x === 'yes' || x === 'no' ? x : 'inherit');
+      const rules = [mode(p.points_mode), mode(p.general_offers_mode), mode(p.special_offers_mode)];
       const low = Math.floor(num(p.low_stock_at === undefined ? 3 : p.low_stock_at, 'حد التنبيه للمخزون المنخفض'));
       if (low > 100000) return bad('حد التنبيه للمخزون المنخفض كبير جداً');
       const levels = cleanStock(p.stock, v);
@@ -763,12 +792,13 @@ export async function handleShop(body, ctx) {
         let r;
         if (p.id) {
           r = await tx.unsafe(`update cakeshop.mc_shop_products set name=$1, category_id=$2, description=$3, price=$4, old_price=$5,
-            available=$6, hidden=$7, images=$8::text::jsonb, specs=$9::text::jsonb, colors=$10::text::jsonb, variants=$11::text::jsonb, code=$12, track_stock=$13, low_stock_at=$14, updated_at=now()
-            where id=$15 returning id`, [...vals, v.code, track, low, T(p.id)]);
+            available=$6, hidden=$7, images=$8::text::jsonb, specs=$9::text::jsonb, colors=$10::text::jsonb, variants=$11::text::jsonb, code=$12, track_stock=$13, low_stock_at=$14,
+            points_mode=$16, general_offers_mode=$17, special_offers_mode=$18, updated_at=now()
+            where id=$15 returning id`, [...vals, v.code, track, low, T(p.id), ...rules]);
           if (!r.length) throw new Error('المنتج غير موجود');
         } else {
-          r = await tx.unsafe(`insert into cakeshop.mc_shop_products (name, category_id, description, price, old_price, available, hidden, images, specs, colors, variants, code, track_stock, low_stock_at)
-            values ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb,$10::text::jsonb,$11::text::jsonb,$12,$13,$14) returning id`, [...vals, v.code, track, low]);
+          r = await tx.unsafe(`insert into cakeshop.mc_shop_products (name, category_id, description, price, old_price, available, hidden, images, specs, colors, variants, code, track_stock, low_stock_at, points_mode, general_offers_mode, special_offers_mode)
+            values ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb,$10::text::jsonb,$11::text::jsonb,$12,$13,$14,$15,$16,$17) returning id`, [...vals, v.code, track, low, ...rules]);
         }
         // الكميات الفعلية (جرد/إضافة بضاعة): كل تغيير بيتسجل في سجل حركات المخزون
         if (track) for (const l of levels) {

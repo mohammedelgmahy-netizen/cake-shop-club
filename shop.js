@@ -440,7 +440,7 @@
     var off = pct(p), t = thumb(p);
     return '<a class="pc" href="#shop/p/' + esc(p.id) + '" data-pid="' + esc(p.id) + '"><div class="im">' +
       (t ? img(t, p.name, ' loading="lazy"') : '<span class="noimg">📦</span>') +
-      (off ? '<span class="off">-' + off + '%</span>' : '') + (p.available ? (bdayDiscType() ? '<span class="bd-b">🎂 ' + bdayVal() + '</span>' : '') : '<span class="na">غير متوفر حالياً</span>') + '</div>' +
+      (off ? '<span class="off">-' + off + '%</span>' : '') + (p.available ? (bdayDiscType() && p.general_offers !== false ? '<span class="bd-b">🎂 ' + bdayVal() + '</span>' : '') : '<span class="na">غير متوفر حالياً</span>') + '</div>' +
       '<div class="bd"><div class="nm">' + esc(p.name) + '</div><div class="pr"><b>' + money(p.price) + '</b>' + (off ? '<s>' + money(p.old_price) + '</s>' : '') + '</div>' +
       '<div class="av ' + (p.available ? 'y">● متوفر' : 'n">● غير متوفر') + '</div></div></a>';
   }
@@ -515,7 +515,7 @@
       '<div class="pd-body">' + (c ? '<button type="button" class="pd-cat" id="pdCat">' + (c.image ? '' : esc(c.icon || '') + ' ') + esc(c.name) + '</button>' : '') +
       '<h1 class="pd-name">' + esc(p.name) + '</h1>' +
       '<div class="pd-price"><b>' + money(p.price) + '</b>' + (off ? '<s>' + money(p.old_price) + '</s><span class="sv">خصم ' + off + '% · وفّر ' + money(p.old_price - p.price) + '</span>' : '') + '</div>' +
-      (bdayDiscType() && p.available ? '<span class="pd-bday">🎂 خصم عيد ميلادك ' + bdayVal() + ' يتطبق عند إتمام الطلب' + (BDAY.end ? ' · ساري حتى ' + esc(BDAY.end) : '') + '</span><br>' : '') +
+      (bdayDiscType() && p.available && p.general_offers !== false ? '<span class="pd-bday">🎂 خصم عيد ميلادك ' + bdayVal() + ' يتطبق عند إتمام الطلب' + (BDAY.end ? ' · ساري حتى ' + esc(BDAY.end) : '') + '</span><br>' : '') +
       '<span class="pd-av ' + (!p.available ? 'n">✕ غير متوفر حالياً' : lowStock(p) ? 'l">⚡ باقي كمية قليلة' : 'y">✓ متوفر') + '</span>' +
       (p.colors && p.colors.length ? '<div class="pd-sec"><h3>النكهات المتاحة</h3><div class="pd-sw" id="pdSw">' + p.colors.map(function (k, i) { var ci = colorImg(p, k.n); return '<button type="button" class="sw" data-sw="' + i + '">' + (ci ? img(ci.t || ci.u, '') : k.c ? '<i style="background:' + esc(k.c) + '"></i>' : '') + esc(k.n) + '</button>'; }).join('') + '</div></div>' : '') +
       (p.variants && p.variants.length ? '<div class="pd-sec"><h3>الأحجام المتاحة</h3><div class="pd-sw">' + p.variants.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join('') + '</div></div>' : '') +
