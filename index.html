@@ -22,7 +22,7 @@ window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); 
   var params = {}; new URLSearchParams(location.search).forEach(function(v,k){ params[k]=v; });
   var base = location.href.split('#')[0].split('?')[0];
   function fail(){ document.getElementById('m').innerHTML = 'تعذر الاتصال. تأكد من الإنترنت ثم <a href="" style="color:#5EE0DB">أعد المحاولة</a>'; }
-  var V = {"Register":"375c7dab69","Card":"34cca0d7d6","Unsub":"463c3be20d","Message":"4a901c5b01","Admin":"1e1340ae85","Table":"03e786a20a"};
+  var V = {"Register":"375c7dab69","Card":"34cca0d7d6","Unsub":"463c3be20d","Message":"4a901c5b01","Admin":"c61f5eb8a7","Table":"03e786a20a"};
   var getPage = function(n){ return fetch(base.replace(/[^/]*$/, '') + 'pages/' + n + '.html?v=' + V[n]).then(function(r){ if (!r.ok) throw new Error('page'); return r.text(); }); };
   var guess = params.tb ? 'Table' : params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
   var early = getPage(guess); early.catch(function(){});

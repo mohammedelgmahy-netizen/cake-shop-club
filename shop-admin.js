@@ -480,6 +480,7 @@
 
   var OPEN_ORDER = '';
   window.viewShopOrders = function (v) {
+    if (GO_OPT && GO_OPT.st !== undefined) OF.st = GO_OPT.st;
     sh('orders').then(function (r) { ORD = r; drawOrders(v); if (OPEN_ORDER) { var id = OPEN_ORDER; OPEN_ORDER = ''; orderDetails(id); } }).catch(function (e) { v.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
   };
   function reloadOrders(openId) {
