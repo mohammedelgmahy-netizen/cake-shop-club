@@ -761,7 +761,8 @@
       b.innerHTML = '<div class="ol">' +
         '<div class="pd-sec" style="margin:0"><h3>👤 بياناتك</h3>' + row('الاسم', esc(Q.customer.name)) + row('رقم الهاتف', '<span dir="ltr">' + esc(Q.customer.phone) + '</span>') + (Q.customer.member_no ? row('رقم العضوية', esc(Q.customer.member_no)) : '') + '</div>' +
         '<div class="pd-sec" style="margin:0"><h3>📍 طريقة استلام الطلب</h3><div class="co-opts">' +
-          (Q.delivery_enabled ? '<button type="button" data-dl="delivery"' + (CO.delivery === 'delivery' ? ' class="on"' : '') + '>🚚 التوصيل إلى عنواني<small>' + (Q.delivery_fee > 0 ? 'رسوم التوصيل ' + money(Q.delivery_fee) : 'من غير رسوم توصيل') + '</small></button>' : '') +
+          (Q.delivery_enabled ? '<button type="button" data-dl="delivery"' + (CO.delivery === 'delivery' ? ' class="on"' : '') + '>🚚 التوصيل إلى عنواني<small>' + (Q.delivery_fee > 0 ? 'رسوم التوصيل ' + money(Q.delivery_fee) : 'من غير رسوم توصيل') + '</small></button>'
+            : '<button type="button" disabled style="opacity:.5;cursor:not-allowed">🚚 التوصيل إلى عنواني<small>التوصيل مش متاح حالياً</small></button>') +
           '<button type="button" data-dl="pickup"' + (CO.delivery === 'pickup' ? ' class="on"' : '') + '>🏪 الاستلام من الفرع<small>من غير رسوم توصيل</small></button></div>' +
           (CO.delivery === 'delivery' ? addrBlock() : branchBlock()) + '</div>' +
         '<div class="pd-sec" style="margin:0"><h3>🛍️ المنتجات (' + Q.lines.reduce(function (s, l) { return s + l.qty; }, 0) + ')</h3>' + Q.lines.map(function (l) {
