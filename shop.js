@@ -72,6 +72,13 @@
     '.pd-av.l{color:#F5C451}',
     '.cnote{position:relative;background:linear-gradient(135deg,rgba(236,91,156,.18),rgba(94,224,219,.12));border:1px solid rgba(236,91,156,.45);border-radius:16px;padding:12px 14px 12px 40px;margin:-4px 0 14px}',
     '.cnote b{display:block;font-size:15px}.cnote span{display:block;font-size:13px;margin-top:3px;line-height:1.6}.cnote small{color:var(--muted);font-size:11.5px}',
+    '.cn-bell{position:relative;width:38px;height:34px;padding:0!important;display:grid;place-items:center;font-size:17px}',
+    '.cn-bell i{position:absolute;top:-6px;left:-6px;min-width:19px;height:19px;border-radius:999px;background:#EC5B9C;color:#fff;font-style:normal;font-size:11px;font-weight:800;display:grid;place-items:center;padding:0 5px;font-family:Inter,sans-serif;box-shadow:0 0 0 2px var(--bg,#170B14)}',
+    '.cn-bell i.z{display:none}.cn-bell.ring{animation:cnr 1s ease 2}@keyframes cnr{0%,100%{transform:rotate(0)}25%{transform:rotate(14deg)}75%{transform:rotate(-14deg)}}',
+    '.cnl{display:flex;flex-direction:column;gap:8px}.cni{display:flex;gap:10px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.03);text-align:right}',
+    '.cni.un{border-color:rgba(236,91,156,.55);background:linear-gradient(135deg,rgba(236,91,156,.16),rgba(94,224,219,.07))}',
+    '.cni .ic{flex:0 0 auto;font-size:22px;line-height:1.2}.cni .t{flex:1;min-width:0}.cni b{display:block;font-size:14.5px}.cni span{display:block;font-size:13px;line-height:1.6;margin-top:2px}.cni small{display:block;color:var(--muted);font-size:11px;margin-top:3px}',
+    '.cni .dot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:#EC5B9C;margin-top:6px}',
     '.cnote .x{position:absolute;top:8px;left:8px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:inherit;font-size:16px;cursor:pointer}',
     '.pd-sw span{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 10px;font-size:13px;font-weight:700;background:rgba(255,255,255,.03)}',
     '.pd-sw i{width:18px;height:18px;border-radius:50%;border:1px solid rgba(255,255,255,.35);flex:0 0 auto}',
@@ -276,20 +283,61 @@
     anchor.parentNode.insertBefore(o, anchor);
     var sm = document.createElement('div'); sm.id = 'ordSummary'; sm.className = 'osum'; sm.dir = 'rtl';
     anchor.parentNode.insertBefore(sm, anchor);
-    var nt = document.createElement('div'); nt.id = 'custNotes'; nt.dir = 'rtl';
-    anchor.parentNode.insertBefore(nt, anchor);
     drawSummary(); loadSummary();
   }
   /* ---------- إشعارات العميل (النقاط اللي اتضافت على طلباته) ---------- */
+  /* ---------- إشعارات العميل: جرس فوق بعدد غير المقروء (الطلبات + النقاط + العروض) ---------- */
+  var NOTES = [], OFSEEN = null;
+  function seenOffers() { if (OFSEEN) return OFSEEN; try { OFSEEN = JSON.parse(localStorage.getItem('cs_seen_offers') || '[]'); } catch (e) { OFSEEN = []; } return OFSEEN; }
+  function offerItems() {
+    var D = window.BOOT && BOOT.card; var list = (D && D.offers) || [];
+    return list.map(function (o) { return { offer: o, unread: seenOffers().indexOf(o.offer_id) < 0 }; });
+  }
+  function bell() {
+    var b = document.getElementById('cnBell'); if (b) return b;
+    var bar = document.querySelector('.brandbar > div:last-child'); if (!bar || !token()) return null;
+    b = document.createElement('button'); b.type = 'button'; b.id = 'cnBell'; b.className = 'chip-btn cn-bell'; b.setAttribute('aria-label', 'الإشعارات');
+    b.innerHTML = '🔔<i class="z">0</i>'; b.onclick = openNotes; bar.insertBefore(b, bar.firstChild); return b;
+  }
+  function paintBell() {
+    var b = bell(); if (!b) return;
+    var n = NOTES.filter(function (x) { return !x.read_at; }).length + offerItems().filter(function (x) { return x.unread; }).length, i = b.querySelector('i');
+    var was = Number(i.textContent) || 0; i.textContent = n > 9 ? '9+' : n; i.className = n ? '' : 'z';
+    if (n > was) { b.classList.remove('ring'); void b.offsetWidth; b.classList.add('ring'); }
+  }
   function loadNotes() {
     if (!token()) return;
-    rpc(['myNotes', { token: token() }]).then(function (r) {
-      var el = document.getElementById('custNotes'); if (!el) return;
-      var un = (r.notes || []).filter(function (n) { return !n.read_at; }).slice(0, 3);
-      el.innerHTML = un.map(function (n) { return '<div class="cnote"><button type="button" class="x" aria-label="إخفاء">×</button><b>' + esc(n.title) + '</b>' + (n.body ? '<span>' + esc(n.body) + '</span>' : '') + '</div>'; }).join('');
-      Array.prototype.forEach.call(el.querySelectorAll('.x'), function (b) { b.onclick = function () { el.innerHTML = ''; rpc(['readNotes', { token: token() }]).catch(function () { }); }; });
-    }).catch(function () { });
+    bell(); paintBell();
+    rpc(['myNotes', { token: token() }]).then(function (r) { NOTES = r.notes || []; paintBell(); }).catch(function () { });
   }
+  function ago(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  function openNotes() {
+    var offers = offerItems();
+    var items = NOTES.map(function (n) { return { ic: /طلب|order/i.test(n.ref_type) ? (/نقط/.test(n.title) ? '⭐' : '📦') : '🔔', t: n.title, b: n.body, at: n.created_at, un: !n.read_at, go: n.ref_type === 'order' && n.ref_id ? '#shop/orders/' + n.ref_id : '' }; })
+      .concat(offers.map(function (x) { return { ic: '🎁', t: 'عرض: ' + x.offer.title, b: x.offer.end_date ? 'متاح لحد ' + String(x.offer.end_date).slice(0, 10) : '', at: x.offer.start_date, un: x.unread, offer: x.offer.offer_id }; }))
+      .sort(function (a, b) { return (b.un - a.un) || String(b.at || '').localeCompare(String(a.at || '')); });
+    var o = document.createElement('div'); o.className = 'osh'; o.dir = 'rtl';
+    o.innerHTML = '<div class="bx"><div class="hd" style="align-items:center"><div style="flex:1"><b>🔔 الإشعارات</b></div><button type="button" class="x" data-x>×</button></div>' +
+      (items.length ? '<div class="cnl">' + items.map(function (x, k) { return '<div class="cni' + (x.un ? ' un' : '') + '" data-k="' + k + '"' + (x.go || x.offer ? ' style="cursor:pointer"' : '') + '><span class="ic">' + x.ic + '</span><div class="t"><b>' + esc(x.t) + '</b>' + (x.b ? '<span>' + esc(x.b) + '</span>' : '') + (x.at ? '<small>' + esc(ago(x.at)) + '</small>' : '') + '</div>' + (x.un ? '<span class="dot"></span>' : '') + '</div>'; }).join('') + '</div>'
+        : '<div class="sh-empty" style="padding:30px 0"><div>🔕</div>مفيش إشعارات لسه</div>') + '</div>';
+    document.body.appendChild(o);
+    function close() { o.remove(); }
+    o.addEventListener('click', function (e) { if (e.target === o) close(); });
+    o.querySelector('[data-x]').onclick = close;
+    Array.prototype.forEach.call(o.querySelectorAll('[data-k]'), function (el) {
+      el.onclick = function () {
+        var x = items[+el.dataset.k]; close();
+        if (x.go) nav(x.go);
+        else if (x.offer) { var f = document.getElementById('offer-' + x.offer); if (f) { f.scrollIntoView({ behavior: 'smooth', block: 'center' }); f.click(); } }
+      };
+    });
+    // فتح القائمة = كله اتقرا
+    if (NOTES.some(function (n) { return !n.read_at; })) { NOTES.forEach(function (n) { n.read_at = n.read_at || new Date().toISOString(); }); rpc(['readNotes', { token: token() }]).catch(function () { }); }
+    var seen = seenOffers(); offers.forEach(function (x) { if (seen.indexOf(x.offer.offer_id) < 0) seen.push(x.offer.offer_id); });
+    try { localStorage.setItem('cs_seen_offers', JSON.stringify(seen.slice(-200))); } catch (e) { }
+    paintBell();
+  }
+  setInterval(function () { if (!document.hidden && token()) loadNotes(); }, 60000);
 
   /* ---------- ملخص طلبات العميل: الأونلاين + مشتريات المحل (من قاعدة البيانات) ---------- */
   var SUM = null;

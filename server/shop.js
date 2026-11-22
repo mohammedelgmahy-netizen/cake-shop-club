@@ -582,7 +582,7 @@ export async function handleShop(body, ctx) {
       // تغيير الحالة بيحجز/يفك/يخصم المخزون تلقائياً من قاعدة البيانات (Trigger) في نفس العملية
       const res = await sql.begin(async (tx) => {
         await tx.unsafe("select set_config('cakeshop.actor', $1, true)", [user.name || 'الإدارة']);
-        const cur = await tx.unsafe('select status, delivery from cakeshop.mc_shop_orders where id = $1 for update', [T(p.id)]);
+        const cur = await tx.unsafe('select status, delivery, customer_id, order_no from cakeshop.mc_shop_orders where id = $1 for update', [T(p.id)]);
         if (!cur.length) throw new Error('الطلب غير موجود');
         const from = cur[0].status;
         if (from === st) throw new Error('الطلب بالفعل في الحالة دي');
@@ -597,6 +597,13 @@ export async function handleShop(body, ctx) {
           reject_reason = case when $2 in ('rejected','cancelled') then $3 else reject_reason end,
           completed_at = case when $2 = 'completed' then coalesce(completed_at, now()) else completed_at end,
           updated_at = now(), history = history || $4::text::jsonb where id = $1`, [T(p.id), st, reason, JSON.stringify([entry])]);
+        // إشعار للعميل في كارته بحالة طلبه (الإتمام بيتبعت مع النقاط بعد الفاتورة)
+        const NOTE = { approved: ['✅ طلبك #N اتقبل', 'المحل وافق على طلبك وهيبدأ يجهزه.'], preparing: ['👩‍🍳 بنجهز طلبك #N', 'طلبك دلوقتي في المطبخ 🍰'],
+          ready: [cur[0].delivery === 'delivery' ? '📦 طلبك #N جاهز' : '🏪 طلبك #N جاهز للاستلام', cur[0].delivery === 'delivery' ? 'هيخرج للتوصيل قريب.' : 'تقدر تعدّي تستلمه من الفرع.'],
+          shipped: ['🚚 طلبك #N خرج للتوصيل', 'المندوب في الطريق ليك.'], rejected: ['❌ طلبك #N اترفض', reason], cancelled: ['🚫 طلبك #N اتلغى', reason] }[st];
+        if (NOTE) await tx.unsafe(`insert into cakeshop.mc_shop_customer_notes (customer_id, title, body, ref_type, ref_id, dedupe_key)
+          values ($1, $2, $3, 'order', $4, $5) on conflict (dedupe_key) do nothing`,
+          [cur[0].customer_id, NOTE[0].replace('#N', '#' + cur[0].order_no), NOTE[1] || '', T(p.id), 'order-st:' + T(p.id) + ':' + st + ':' + Date.now()]);
         return { from };
       });
       // الطلب اتقفل «تم إتمام الطلب» → فاتورة مبيعات تلقائية + نقاط العميل (مرة واحدة بس)

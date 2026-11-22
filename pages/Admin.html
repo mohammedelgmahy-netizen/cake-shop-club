@@ -258,21 +258,53 @@ h2 .kpi-arrow{position:static;font-size:16px}
 .ws-foot .btn[disabled]{opacity:.5;pointer-events:none}
 .recip .msg{font-size:12px;color:var(--muted);white-space:pre-line;max-height:3.2em;overflow:hidden}
 #scanVideo{width:100%;border-radius:14px;background:#000;max-height:320px}
+.lg{position:relative;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:28px 16px;overflow:hidden;
+  background:radial-gradient(120% 80% at 100% 0%,#3B1634 0%,#211020 55%,#160A15 100%);color:#FFF1F7}
+.lg.hidden{display:none}
+.lg-blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55;pointer-events:none}
+.lg-blob.a{width:340px;height:340px;background:#EC5B9C;top:-120px;left:-110px}
+.lg-blob.b{width:300px;height:300px;background:#5EE0DB;bottom:-130px;right:-90px;opacity:.35}
+.lg-blob.c{width:160px;height:160px;background:#F5C451;top:42%;right:-60px;opacity:.22}
+.lg-box{position:relative;z-index:1;width:100%;max-width:420px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:26px;
+  padding:26px 22px 20px;box-shadow:0 30px 80px -30px rgba(0,0,0,.7);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.lg-logo{display:flex;justify-content:center}.lg-logo img{max-height:110px;width:auto;max-width:70%}
+.lg-logo .logo img{max-height:110px}
+.lg-head{text-align:center;margin:12px 0 18px}
+.lg-pill{display:inline-block;font-size:12px;font-weight:800;color:#5EE0DB;background:rgba(94,224,219,.12);border:1px solid rgba(94,224,219,.3);border-radius:999px;padding:4px 12px}
+.lg-head h1{font-size:24px;margin:10px 0 4px;color:#fff}.lg-head p{margin:0;color:#D3B3C6;font-size:13.5px}
+.lg-form label{color:#F3DCE9;font-size:13px;margin:12px 0 6px}
+.lg-in{position:relative;display:flex;align-items:center}
+.lg-in input{background:rgba(255,255,255,.95)!important;color:#211020!important;border:1.5px solid transparent!important;border-radius:14px!important;padding:13px 44px!important;font-size:16px}
+.lg-in input:focus{border-color:#EC5B9C!important;box-shadow:0 0 0 4px rgba(236,91,156,.25)!important}
+.lg-ic{position:absolute;right:13px;font-size:17px;pointer-events:none;opacity:.75}
+.lg-eye{position:absolute;left:8px;border:0;background:transparent;font-size:17px;cursor:pointer;padding:6px;border-radius:8px}
+.lg-btn{margin-top:18px;background:linear-gradient(135deg,#EC5B9C,#B9407A)!important;color:#fff!important;box-shadow:0 14px 30px -12px rgba(236,91,156,.8);font-size:17px}
+.lg .err{margin-top:12px}
+.lg-foot{direction:ltr;text-align:center;color:#A98A9E;font-size:11.5px;margin-top:18px;font-family:Inter,Cairo,sans-serif;letter-spacing:.3px}
+.sqr{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.sqr-code{flex:0 0 auto;width:132px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:8px;cursor:zoom-in}
+.sqr-info{flex:1 1 200px;min-width:0}.sqr-info h2{margin:0 0 4px}.sqr-url{direction:ltr;font-size:12px;color:var(--muted);word-break:break-all;margin:4px 0 10px;text-align:left}
+.sqr-acts{display:flex;flex-wrap:wrap;gap:6px}.sqr-acts .btn{width:auto;flex:1 1 auto;padding:9px 12px;font-size:13.5px}
+.qr-big{background:#fff;border-radius:20px;padding:14px;max-width:420px;margin:0 auto}
+.qrbox svg{width:240px;height:240px}
 @media print{.topbar,.nav,.noprint{display:none!important}.shell{display:block}.main{padding:0}body.admin{background:#fff}}
 </style>
 </head>
 <body class="admin">
-<div id="loginView" class="wrap hidden" style="padding-top:60px">
-  <div class="card">
-    <div style="display:flex;justify-content:center;margin-bottom:10px" id="loginLogo"></div>
-    <h2 style="text-align:center">لوحة إدارة Cake Shop Dessert Cafe</h2>
-    <form id="loginForm">
-      <label>اسم المستخدم</label><input id="lUser" autocomplete="username" style="direction:ltr">
-      <label>كلمة المرور</label><input id="lPass" type="password" autocomplete="current-password" style="direction:ltr">
+<div id="loginView" class="lg hidden">
+  <i class="lg-blob a"></i><i class="lg-blob b"></i><i class="lg-blob c"></i>
+  <div class="lg-box">
+    <div class="lg-logo" id="loginLogo"></div>
+    <div class="lg-head"><span class="lg-pill">🔐 لوحة الإدارة</span><h1>أهلاً بيك تاني 👋</h1><p>سجّل دخولك علشان تتابع العملاء والطلبات والنقاط</p></div>
+    <form id="loginForm" class="lg-form" autocomplete="on">
+      <label for="lUser">اسم المستخدم</label>
+      <div class="lg-in"><span class="lg-ic">👤</span><input id="lUser" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="username" style="direction:ltr"></div>
+      <label for="lPass">كلمة المرور</label>
+      <div class="lg-in"><span class="lg-ic">🔑</span><input id="lPass" type="password" autocomplete="current-password" placeholder="••••••••" style="direction:ltr"><button type="button" class="lg-eye" id="lEye" aria-label="إظهار كلمة المرور">👁️</button></div>
       <div id="lErr" class="err hidden"></div>
-      <div style="height:14px"></div>
-      <button class="btn" id="lBtn" type="submit">دخول</button>
+      <button class="btn lg-btn" id="lBtn" type="submit">دخول</button>
     </form>
+    <div class="lg-foot">Cake Shop Dessert Cafe · Sweet Treats. Sweet Rewards.</div>
   </div>
 </div>
 
@@ -302,6 +334,7 @@ h2 .kpi-arrow{position:static;font-size:16px}
 <div id="toastRoot"></div>
 <script>var BOOT = window.__MC_BOOT__;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="qr.js?v=d7e925344b"></script>
 <script>
 /* Cake Shop Dessert Cafe — أدوات مشتركة لصفحات المتصفح */
 var ICONS = {
@@ -346,6 +379,7 @@ function fmtDate(iso, lang, withTime) {
 
 function renderQR(el, text, size) {
   el.innerHTML = '';
+  if (window.mcQRSvg && text) { el.innerHTML = '<div style="width:' + (size || 180) + 'px;max-width:100%;margin:0 auto">' + mcQRSvg(text) + '</div>'; return; }
   if (window.QRCode) {
     new QRCode(el, { text: text, width: size || 180, height: size || 180, colorDark: '#1F0E1C', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   } else {
@@ -434,7 +468,8 @@ function badge(text, cls) { return '<span class="badge ' + (cls || '') + '">' + 
 /* ---------------- الدخول ---------------- */
 function showLogin(msg) {
   $('#appView').classList.add('hidden'); $('#pwView').classList.add('hidden'); $('#loginView').classList.remove('hidden');
-  $('#loginLogo').innerHTML = logoHtml(PS);
+  $('#loginLogo').innerHTML = PS && PS.logo_url ? logoHtml(PS) : '<img src="' + LOGO_FULL + '" alt="Cake Shop Dessert Cafe">';
+  var eye = $('#lEye'); if (eye) eye.onclick = function () { var i = $('#lPass'); i.type = i.type === 'password' ? 'text' : 'password'; eye.textContent = i.type === 'password' ? '👁️' : '🙈'; };
   if (msg) { $('#lErr').textContent = msg; $('#lErr').classList.remove('hidden'); }
 }
 $('#loginForm').addEventListener('submit', function (e) {
@@ -519,7 +554,7 @@ function viewDashboard(v) {
       if (pg === 'reports' && o && o.report) { var r = repById(o.report); return !!(r && repOk(r)); }
       return true;
     };
-    v.innerHTML = '<div class="grid kpis">' + k.map(function (x, i) { var on = okPage(x[2], x[3]); return '<div class="kpi' + (on ? ' kpi-go' : '') + '"' + (on ? ' data-k="' + i + '" role="button" tabindex="0"' : '') + '><span>' + x[0] + '</span><b>' + x[1] + '</b>' + (on ? '<i class="kpi-arrow">‹</i>' : '') + '</div>'; }).join('') + '</div>' +
+    v.innerHTML = shopQrCard() + '<div class="grid kpis">' + k.map(function (x, i) { var on = okPage(x[2], x[3]); return '<div class="kpi' + (on ? ' kpi-go' : '') + '"' + (on ? ' data-k="' + i + '" role="button" tabindex="0"' : '') + '><span>' + x[0] + '</span><b>' + x[1] + '</b>' + (on ? '<i class="kpi-arrow">‹</i>' : '') + '</div>'; }).join('') + '</div>' +
       '<div class="grid two" style="margin-top:12px">' +
       '<div class="card"><h2>الأكثر نشاطاً (آخر 30 يوم)</h2>' + custTable(s.top_active) + '</div>' +
       '<div class="card"><h2>الأعلى شراءً (كل الوقت)</h2>' + custTable(s.top_all_time) + '</div>' +
@@ -528,6 +563,7 @@ function viewDashboard(v) {
       '<div class="card"><h2' + (okPage('offers') ? ' class="h-go" data-go="offers"' : '') + '>العروض النشطة' + (okPage('offers') ? ' <i class="kpi-arrow">‹</i>' : '') + '</h2>' + (s.active_offers.length ? s.active_offers.map(function (o) { return '<div class="recip"><b>' + esc(o.title) + '</b><span class="small muted">' + (o.end_date ? 'حتى ' + d(o.end_date) : 'مفتوح') + '</span></div>'; }).join('') : '<div class="empty">لا توجد عروض نشطة</div>') + '</div>' +
       '</div>';
     $all('[data-cid]', v).forEach(function (tr) { tr.onclick = function () { openCustomer(tr.dataset.cid); }; });
+    bindShopQr(v);
     $all('[data-k]', v).forEach(function (el) {
       var x = k[Number(el.dataset.k)];
       var o = {}; Object.keys(x[3] || {}).forEach(function (kk) { o[kk] = x[3][kk]; });
@@ -1600,23 +1636,78 @@ function viewActivity(v) {
 }
 
 /* ---------------- QR المحل ---------------- */
+/* ---------------- QR المحل (مصدر واحد لكل الشاشات) ----------------
+ * الرابط من إعداد «رابط الموقع» في الإعدادات، ولو فاضي بيتاخد من رابط الموقع الحالي. أي تعديل في الرابط بيتحدّث في كل مكان. */
+function shopUrl() {
+  var u = (META && META.register_url) || (PS && PS.public_base_url) || '';
+  if (!/^https?:\/\//.test(u)) u = location.origin + location.pathname;
+  return u.split('#')[0].replace(/\?.*$/, '');
+}
+function shopQrTitle() { return (PS && (PS.shop_name || PS.program_name)) || 'Cake Shop Dessert Cafe'; }
+function shopQrCanvas() { return mcQRPng(shopUrl(), { size: 900, title: shopQrTitle(), sub: 'امسح الكود وافتح صفحة المحل' }); }
+function downloadShopQr() {
+  if (!window.mcQRPng) return toast('تعذر التحميل، حدّث الصفحة', true);
+  var a = document.createElement('a'); a.href = shopQrCanvas().toDataURL('image/png'); a.download = 'cake-shop-qr.png';
+  document.body.appendChild(a); a.click(); a.remove(); toast('تم تحميل صورة الـ QR ✓');
+}
+function shareShopQr() {
+  var url = shopUrl();
+  if (window.mcQRPng && navigator.canShare) {
+    shopQrCanvas().toBlob(function (b) {
+      var f = b && new File([b], 'cake-shop-qr.png', { type: 'image/png' });
+      var data = { title: shopQrTitle(), text: 'امسح الكود أو افتح الرابط: ' + url, files: f ? [f] : [] };
+      if (f && navigator.canShare(data)) navigator.share(data).catch(function () { });
+      else if (navigator.share) navigator.share({ title: shopQrTitle(), url: url }).catch(function () { });
+      else copyText(url).then(function () { toast('تم نسخ رابط المحل'); });
+    });
+    return;
+  }
+  if (navigator.share) return navigator.share({ title: shopQrTitle(), url: url }).catch(function () { });
+  copyText(url).then(function () { toast('تم نسخ رابط المحل'); });
+}
+function printShopQr() {
+  var w = window.open('', '_blank');
+  if (!w) return go('qr');
+  var src = shopQrCanvas().toDataURL('image/png');
+  w.document.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>QR</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Tahoma,sans-serif}img{width:80vmin;max-width:520px}</style></head><body><img src="' + src + '" onload="setTimeout(function(){window.print()},200)"></body></html>');
+  w.document.close();
+}
+function openShopQr() {
+  var url = shopUrl();
+  var body = modal('🔳 QR المحل', '<div class="qr-big">' + (window.mcQRSvg ? mcQRSvg(url) : '') + '</div>' +
+    '<p class="small muted" style="text-align:center;direction:ltr;word-break:break-all;margin:10px 0">' + esc(url) + '</p>' +
+    '<div class="sqr-acts"><button class="btn sm" type="button" data-q="dl">⬇️ تحميل صورة</button><button class="btn ghost sm" type="button" data-q="sh">📤 مشاركة</button><button class="btn ghost sm" type="button" data-q="pr">🖨️ طباعة</button><button class="btn ghost sm" type="button" data-q="cp">🔗 نسخ الرابط</button></div>');
+  bindShopQr(body);
+}
+function bindShopQr(el) {
+  $all('[data-q]', el).forEach(function (b) {
+    b.onclick = function () {
+      var k = b.dataset.q;
+      if (k === 'big') openShopQr(); else if (k === 'dl') downloadShopQr(); else if (k === 'sh') shareShopQr(); else if (k === 'pr') printShopQr();
+      else if (k === 'cp') copyText(shopUrl()).then(function () { toast('تم نسخ رابط المحل'); });
+    };
+  });
+}
+function shopQrCard() {
+  var url = shopUrl();
+  return '<div class="card sqr" style="margin-bottom:12px"><div class="sqr-code" data-q="big" title="تكبير">' + (window.mcQRSvg ? mcQRSvg(url) : '') + '</div>' +
+    '<div class="sqr-info"><h2>🔳 QR المحل</h2><div class="small muted">العميل يمسحه بالكاميرا فتفتح صفحة المحل على طول (التسجيل وفتح الكارت).</div><div class="sqr-url">' + esc(url) + '</div>' +
+    '<div class="sqr-acts"><button class="btn sm" type="button" data-q="big">🔍 تكبير</button><button class="btn ghost sm" type="button" data-q="dl">⬇️ تحميل</button><button class="btn ghost sm" type="button" data-q="sh">📤 مشاركة</button><button class="btn ghost sm" type="button" data-q="pr">🖨️ طباعة</button></div></div></div>';
+}
+
 function viewQR(v) {
-  var url = META.register_url;
+  var url = shopUrl();
   v.innerHTML = '<div class="card noprint"><h2>QR تسجيل العملاء</h2><p class="small muted">اطبع هذا البوستر وضعه عند الكاشير وعلى الواجهة. العميل يمسحه بكاميرا الموبايل فتفتح صفحة التسجيل مباشرة.</p>' +
-    '<div class="toolbar"><button class="btn sm" id="qrPrint" type="button">طباعة</button><button class="btn ghost sm" id="qrDl" type="button">تحميل صورة QR</button><button class="btn ghost sm" id="qrCopy" type="button">نسخ رابط التسجيل</button></div>' +
+    '<div class="toolbar"><button class="btn sm" id="qrPrint" type="button">طباعة</button><button class="btn ghost sm" id="qrDl" type="button">تحميل صورة QR</button><button class="btn ghost sm" id="qrCopy" type="button">نسخ رابط التسجيل</button><button class="btn ghost sm" id="qrShare" type="button">📤 مشاركة</button></div>' +
     '<div class="small" style="direction:ltr;word-break:break-all;color:var(--muted)">' + esc(url) + '</div></div>' +
     '<div class="poster" style="margin-top:14px"><div style="display:flex;justify-content:center">' + logoHtml(PS) + '</div><h1 style="margin:14px 0 0">' + esc(PS.program_name) + '</h1><div style="color:#7DD3FC;font-family:Inter;letter-spacing:1px">' + esc(PS.tagline) + '</div>' +
     '<p style="font-size:18px;font-weight:800;margin:14px 0 4px">امسح الكود واحصل على كارت الولاء مجاناً</p><p style="color:#CBD5E1;margin:0 0 14px">كل ' + esc(PS.amount_per_point) + ' ' + esc(PS.currency) + ' = نقطة · ' + esc(PS.redeem_points_required) + ' نقطة = خصم ' + esc(PS.discount_percent) + '%</p>' +
     '<div class="qrbox" id="shopQr"></div><p style="color:#CBD5E1;margin-top:14px">بدون تحميل أي تطبيق · ' + esc(PS.shop_phone) + '</p></div>';
   renderQR($('#shopQr'), url, 240);
   $('#qrPrint').onclick = function () { window.print(); };
+  $('#qrShare').onclick = shareShopQr;
   $('#qrCopy').onclick = function () { copyText(url).then(function () { toast('تم النسخ'); }); };
-  $('#qrDl').onclick = function () {
-    var img = $('#shopQr img') || $('#shopQr canvas');
-    var src = img && (img.tagName === 'CANVAS' ? img.toDataURL('image/png') : img.src);
-    if (!src) return toast('تعذر التحميل', true);
-    var a = document.createElement('a'); a.href = src; a.download = 'cake-shop-qr.png'; document.body.appendChild(a); a.click(); a.remove();
-  };
+  $('#qrDl').onclick = downloadShopQr;
 }
 
 boot();
