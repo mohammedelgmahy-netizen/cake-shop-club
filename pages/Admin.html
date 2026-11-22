@@ -1230,8 +1230,10 @@ function viewBirthdays(v) {
     var cur = r.current, up = r.upcoming;
     var pending = function () { return cur.filter(function (x) { return x.wa_opt_in && !x.wa_sent_at; }); };
     v.innerHTML =
-      (!r.enabled ? '<div class="err" style="margin-bottom:12px">عرض عيد الميلاد متوقف دلوقتي، فمش هيظهر للعملاء ولا في الكاشير. فعّله واختار نوعه وقيمته من الإعدادات ← 🎂 عروض أعياد الميلاد.' +
-        (can('settings') ? ' <button class="btn ghost sm" id="bdSet" type="button">افتح الإعدادات</button>' : '') + '</div>' : '') +
+      '<div class="card" style="margin-bottom:12px"><h2>🎂 عرض عيد الميلاد ' + (r.enabled ? badge('فعال', 'green') : badge('غير فعال', 'gray')) + '</h2>' +
+        '<p class="small muted">' + (r.enabled ? 'العرض شغال: بيظهر للعملاء المستحقين وبيتطبق تلقائياً في الطلبات والكاشير.' : 'العرض متوقف: مش بيظهر للعملاء ولا بيتطبق أي خصم. إعداداته محفوظة زي ما هي.') + '</p>' +
+        (can('settings') ? '<div class="toolbar"><button class="btn sm" id="bdOn" type="button"' + (r.enabled ? ' disabled' : '') + '>تفعيل</button><button class="btn ghost sm" id="bdOff" type="button"' + (r.enabled ? '' : ' disabled') + '>إيقاف</button>' +
+          '<button class="btn ghost sm" id="bdSet" type="button">تعديل نوع العرض وقيمته ومدته</button></div>' : '') + '</div>' +
       '<div class="grid kpis" style="margin-bottom:12px">' +
       '<div class="kpi"><span>العرض الحالي</span><b style="font-size:17px">' + esc(r.offer_text) + '</b><span>لمدة ' + r.days + ' يوم من يوم الميلاد</span></div>' +
       '<div class="kpi"><span>عرضهم شغال دلوقتي</span><b id="bdCur">' + fmtNum(cur.length) + '</b></div>' +
@@ -1251,6 +1253,9 @@ function viewBirthdays(v) {
         up.map(function (x) { return '<tr class="click" data-cid="' + esc(x.customer_id) + '"><td>' + esc(x.next) + '</td><td>' + esc(x.name) + ' <span class="small muted">' + esc(x.member_no) + '</span></td><td style="direction:ltr;text-align:end">' + esc(x.phone) + '</td><td>' + (x.wa_opt_in ? badge('موافق', 'green') : badge('لا', 'gray')) + '</td></tr>'; }).join('') +
         '</table></div>' : '<div class="empty">مفيش أعياد ميلاد في الفترة الجاية</div>') + '</div>';
     if ($('#bdSet')) $('#bdSet').onclick = function () { go('settings', { back: ['birthdays', 'أعياد الميلاد'] }); };
+    var bdToggle = function (on, btn) { busy(btn, true); call('saveSettings', { values: { bday_enabled: on ? 'true' : 'false' } }, true).then(function () { toast(on ? 'تم تفعيل عرض عيد الميلاد ✓' : 'تم إيقاف عرض عيد الميلاد'); go('birthdays'); }).catch(function (e) { busy(btn, false); toast(e.message, true); }); };
+    if ($('#bdOn')) $('#bdOn').onclick = function () { bdToggle(true, this); };
+    if ($('#bdOff')) $('#bdOff').onclick = function () { bdToggle(false, this); };
     $all('[data-cid]', v).forEach(function (tr) { tr.onclick = function () { openCustomer(tr.dataset.cid); }; });
     var mark = function (i) {
       var x = cur[i];
@@ -1713,6 +1718,6 @@ function viewQR(v) {
 boot();
 </script>
 
-<script src="shop-admin.js?v=b9c32094d6"></script>
+<script src="shop-admin.js?v=670aa19933"></script>
 </body>
 </html>

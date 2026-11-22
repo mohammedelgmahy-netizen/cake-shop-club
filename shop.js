@@ -34,6 +34,9 @@
     '.pc .im img{width:100%;height:100%;object-fit:contain;padding:8px}',
     '.pc .im .noimg,.pd-gal .noimg{font-size:44px;opacity:.35;color:#211020}',
     '.pc .off{position:absolute;top:8px;inset-inline-start:8px;background:linear-gradient(135deg,#F43F5E,#E11D48);color:#fff;font-family:Inter,Cairo,sans-serif;font-weight:800;font-size:12px;padding:3px 9px;border-radius:999px;direction:ltr}',
+    '.pc .bd-b{position:absolute;bottom:8px;inset-inline-end:8px;background:linear-gradient(135deg,#EC4899,#A855F7);color:#fff;font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px}',
+    '.bday-bn{margin:12px 14px 0;padding:12px 14px;border-radius:16px;background:linear-gradient(135deg,rgba(236,72,153,.16),rgba(168,85,247,.16));border:1px solid rgba(236,72,153,.35);display:flex;gap:10px;align-items:center}.bday-bn .ic{font-size:28px}.bday-bn b{display:block;font-size:14px}.bday-bn span{display:block;font-size:13px;margin-top:2px}.bday-bn small{display:block;font-size:12px;opacity:.8;margin-top:3px}',
+    '.pd-bday{display:inline-block;margin:8px 0 0;background:linear-gradient(135deg,#EC4899,#A855F7);color:#fff;font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px}',
     '.pc .na{position:absolute;inset:auto 0 0 0;background:rgba(36,16,32,.82);color:#FECACA;font-size:12px;font-weight:800;text-align:center;padding:4px}',
     '.pc .bd{padding:10px 11px 12px;display:flex;flex-direction:column;gap:4px;flex:1}',
     '.pc .nm{font-size:13.5px;font-weight:700;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}',
@@ -417,11 +420,27 @@
     bindBack(); document.getElementById('shRetry').onclick = function () { ERR = ''; renderSkeleton(); load(); };
   }
 
+  /* ---------- عرض عيد الميلاد ---------- */
+  var BDAY = null, BDAYL = false;
+  function loadBday() {
+    if (BDAYL || !token()) return; BDAYL = true;
+    rpc(['myBirthday', { token: token() }]).then(function (d) {
+      BDAY = d && d.offer && d.offer.status === 'available' ? d.offer : null;
+      if (BDAY && isShop()) route();
+    }).catch(function () { BDAYL = false; });
+  }
+  function bdayDiscType() { return BDAY && (BDAY.type === 'percent' || BDAY.type === 'fixed') && Number(BDAY.value) > 0; }
+  function bdayVal() { return BDAY.type === 'percent' ? Number(BDAY.value) + '%' : money(BDAY.value); }
+  function bdayBanner() {
+    if (!BDAY) return '';
+    return '<div class="bday-bn"><div class="ic">🎂</div><div><b>عرض عيد ميلادك</b><span>' + esc(BDAY.offer_text || (bdayDiscType() ? 'خصم ' + bdayVal() + ' على طلبك' : '')) + '</span>' +
+      (BDAY.end ? '<small>العرض ساري حتى ' + esc(BDAY.end) + '</small>' : '') + '</div></div>';
+  }
   function card(p) {
     var off = pct(p), t = thumb(p);
     return '<a class="pc" href="#shop/p/' + esc(p.id) + '" data-pid="' + esc(p.id) + '"><div class="im">' +
       (t ? img(t, p.name, ' loading="lazy"') : '<span class="noimg">📦</span>') +
-      (off ? '<span class="off">-' + off + '%</span>' : '') + (p.available ? '' : '<span class="na">غير متوفر حالياً</span>') + '</div>' +
+      (off ? '<span class="off">-' + off + '%</span>' : '') + (p.available ? (bdayDiscType() ? '<span class="bd-b">🎂 ' + bdayVal() + '</span>' : '') : '<span class="na">غير متوفر حالياً</span>') + '</div>' +
       '<div class="bd"><div class="nm">' + esc(p.name) + '</div><div class="pr"><b>' + money(p.price) + '</b>' + (off ? '<s>' + money(p.old_price) + '</s>' : '') + '</div>' +
       '<div class="av ' + (p.available ? 'y">● متوفر' : 'n">● غير متوفر') + '</div></div></a>';
   }
@@ -447,8 +466,9 @@
     var cats = DATA.categories, c = catById(ST.cat);
     var counts = {}; DATA.products.forEach(function (p) { counts[p.category_id] = (counts[p.category_id] || 0) + 1; });
     var focused = document.activeElement && document.activeElement.id === 'shQ';
+    loadBday();
     view.innerHTML = topBar(c ? esc(c.name) : 'تصفح منتجاتنا', true) +
-      '<div class="sh-cats" id="shCats"><button type="button" class="sh-cat' + (ST.cat ? '' : ' on') + '" data-cat=""><div class="ci">🏬</div><span>الكل</span></button>' +
+      bdayBanner() + '<div class="sh-cats" id="shCats"><button type="button" class="sh-cat' + (ST.cat ? '' : ' on') + '" data-cat=""><div class="ci">🏬</div><span>الكل</span></button>' +
       cats.map(function (k) { return '<button type="button" class="sh-cat' + (k.id === ST.cat ? ' on' : '') + '" data-cat="' + esc(k.id) + '"><div class="ci">' + catIcon(k) + '</div><span>' + esc(k.name) + '</span></button>'; }).join('') + '</div>' +
       '<div class="sh-tools"><div class="cnt" id="shCnt"></div><select id="shSort" aria-label="الترتيب">' +
       [['new', 'الأحدث'], ['asc', 'السعر: من الأقل للأعلى'], ['desc', 'السعر: من الأعلى للأقل']].map(function (o) { return '<option value="' + o[0] + '"' + (ST.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
@@ -485,6 +505,7 @@
       return bindBack();
     }
     var c = catById(p.category_id), off = pct(p), imgs = p.images || [];
+    loadBday();
     var rel = DATA.products.filter(function (x) { return x.id !== p.id && x.category_id === p.category_id; }).slice(0, 10);
     view.innerHTML = topBar(esc(p.name), false) +
       '<div class="pd-gal">' + (imgs.length ? '<div class="pd-track" id="pdTrack">' + imgs.map(function (im, i) { return img(im.u, p.name, ' data-i="' + i + '"' + (i ? ' loading="lazy"' : '')); }).join('') + '</div>' +
@@ -494,6 +515,7 @@
       '<div class="pd-body">' + (c ? '<button type="button" class="pd-cat" id="pdCat">' + (c.image ? '' : esc(c.icon || '') + ' ') + esc(c.name) + '</button>' : '') +
       '<h1 class="pd-name">' + esc(p.name) + '</h1>' +
       '<div class="pd-price"><b>' + money(p.price) + '</b>' + (off ? '<s>' + money(p.old_price) + '</s><span class="sv">خصم ' + off + '% · وفّر ' + money(p.old_price - p.price) + '</span>' : '') + '</div>' +
+      (bdayDiscType() && p.available ? '<span class="pd-bday">🎂 خصم عيد ميلادك ' + bdayVal() + ' يتطبق عند إتمام الطلب' + (BDAY.end ? ' · ساري حتى ' + esc(BDAY.end) : '') + '</span><br>' : '') +
       '<span class="pd-av ' + (!p.available ? 'n">✕ غير متوفر حالياً' : lowStock(p) ? 'l">⚡ باقي كمية قليلة' : 'y">✓ متوفر') + '</span>' +
       (p.colors && p.colors.length ? '<div class="pd-sec"><h3>النكهات المتاحة</h3><div class="pd-sw" id="pdSw">' + p.colors.map(function (k, i) { var ci = colorImg(p, k.n); return '<button type="button" class="sw" data-sw="' + i + '">' + (ci ? img(ci.t || ci.u, '') : k.c ? '<i style="background:' + esc(k.c) + '"></i>' : '') + esc(k.n) + '</button>'; }).join('') + '</div></div>' : '') +
       (p.variants && p.variants.length ? '<div class="pd-sec"><h3>الأحجام المتاحة</h3><div class="pd-sw">' + p.variants.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join('') + '</div></div>' : '') +
@@ -613,11 +635,12 @@
   }
   function sumHtml(q, withShip) {
     var row = function (k, v, cls) { return '<div class="od-row' + (cls ? ' ' + cls : '') + '"><span>' + k + '</span><span>' + v + '</span></div>'; };
-    var disc = q.product_discount + q.promo_discount;
+    var disc = q.product_discount + q.promo_discount + (q.birthday_discount || 0);
     return '<div class="pd-sec sum" style="margin:0">' +
       row('إجمالي المنتجات', '<b>' + money(q.subtotal) + '</b>') +
       (q.product_discount > 0 ? row('خصم المنتجات', '− ' + money(q.product_discount), 'dc') : '') +
       (q.promo_discount > 0 ? row('كود الخصم (' + esc(q.promo.code) + ')', '− ' + money(q.promo_discount), 'dc') : '') +
+      (q.birthday_discount > 0 ? row('🎂 خصم عيد الميلاد', '− ' + money(q.birthday_discount), 'dc') : '') +
       (disc > 0 ? row('إجمالي الخصومات', '− ' + money(disc), 'dc') : '') +
       (withShip && q.delivery === 'delivery' ? row('مصاريف التوصيل', q.shipping > 0 ? money(q.shipping) : 'مجاناً') : '') +
       row('الإجمالي النهائي', '<b>' + money(q.total) + '</b>', 'fin') + '</div>';
@@ -843,7 +866,7 @@
     }
     var row = function (k, v) { return '<div class="od-row"><span>' + k + '</span><span>' + v + '</span></div>'; };
     var its = x.items && x.items.length ? x.items : [{ name: x.product_name, code: x.product_code, color: x.color, variant: x.variant, qty: x.qty, unit_price: x.unit_price, old_price: 0, line_total: x.total, image: x.image }];
-    var disc = (x.product_discount || 0) + (x.promo_discount || 0);
+    var disc = (x.product_discount || 0) + (x.promo_discount || 0) + (Number(x.birthday_discount) || 0);
     view.innerHTML = topBar('طلب #' + x.order_no, false) + '<div class="ol">' +
       '<div class="pd-sec" style="margin:0"><div class="od-row"><span>الحالة</span><span>' + stBadge(x.status) + '</span></div>' +
       ((x.status === 'rejected' || x.status === 'cancelled') && x.reject_reason ? row(x.status === 'rejected' ? 'سبب الرفض' : 'سبب الإلغاء', '<b style="color:#F87171">' + esc(x.reject_reason) + '</b>') : '') +
@@ -857,6 +880,7 @@
       '<div class="pd-sec sum" style="margin:0">' + row('إجمالي المنتجات', money(x.subtotal || x.total)) +
       (x.product_discount > 0 ? '<div class="od-row dc"><span>خصم المنتجات</span><span>− ' + money(x.product_discount) + '</span></div>' : '') +
       (x.promo_code ? '<div class="od-row dc"><span>كود الخصم (' + esc(x.promo_code) + ')</span><span>− ' + money(x.promo_discount) + '</span></div>' : '') +
+      (Number(x.birthday_discount) > 0 ? '<div class="od-row dc"><span>🎂 خصم عيد الميلاد</span><span>− ' + money(x.birthday_discount) + '</span></div>' : '') +
       (disc > 0 ? '<div class="od-row dc"><span>إجمالي الخصومات</span><span>− ' + money(disc) + '</span></div>' : '') +
       (x.delivery === 'delivery' ? row('مصاريف التوصيل', x.shipping > 0 ? money(x.shipping) : 'مجاناً') : '') +
       '<div class="od-row fin"><span>الإجمالي النهائي</span><span><b>' + money(x.total) + '</b></span></div>' +

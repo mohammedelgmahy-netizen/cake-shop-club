@@ -487,7 +487,7 @@
     });
     var box = $('#soList');
     var live = rows.filter(function (o) { return OF.st === 'rejected' || OF.st === 'cancelled' || (o.status !== 'rejected' && o.status !== 'cancelled'); });
-    var sumT = live.reduce(function (s, o) { return s + Number(o.total || 0); }, 0), sumD = live.reduce(function (s, o) { return s + Number(o.product_discount || 0) + Number(o.promo_discount || 0); }, 0);
+    var sumT = live.reduce(function (s, o) { return s + Number(o.total || 0); }, 0), sumD = live.reduce(function (s, o) { return s + Number(o.product_discount || 0) + Number(o.promo_discount || 0) + Number(o.birthday_discount || 0); }, 0);
     $('#soSum').innerHTML = '<div><small>عدد الطلبات</small><b>' + rows.length + '</b></div><div><small>إجمالي قيمة الطلبات</small><b>' + money(sumT) + '</b></div><div><small>إجمالي الخصومات</small><b>' + money(sumD) + '</b></div>' +
       (OF.st === 'rejected' || OF.st === 'cancelled' ? '' : '<div style="flex-basis:100%;background:transparent;border:0;padding:0"><small>الإجماليات من غير الطلبات الملغية والمرفوضة</small></div>');
     if (!rows.length) { box.innerHTML = '<div class="empty">' + (ORD.length ? 'مفيش طلبات بالبحث ده' : 'لسه مفيش طلبات من العملاء.') + '</div>'; return; }
@@ -511,7 +511,7 @@
     var r = function (k, val) { return '<div class="r"><span>' + k + '</span><span>' + val + '</span></div>'; };
     var shop = (PS && (PS.shop_name || PS.program_name)) || 'كيك شوب';
     var msg = 'أهلاً ' + o.customer_name + ' 👋\nبخصوص طلبك رقم #' + o.order_no + ' (' + o.product_name + ') من ' + shop + ':\nحالة الطلب: ' + (ST_AR[o.status] || o.status);
-    var disc = Number(o.product_discount || 0) + Number(o.promo_discount || 0);
+    var disc = Number(o.product_discount || 0) + Number(o.promo_discount || 0) + Number(o.birthday_discount || 0);
     var body = modal('طلب #' + o.order_no,
       '<div class="so-det">' + r('الحالة', stB(o.status)) +
       ((o.status === 'rejected' || o.status === 'cancelled') && o.reject_reason ? r(o.status === 'rejected' ? 'سبب الرفض' : 'سبب الإلغاء', esc(o.reject_reason)) : '') +
@@ -526,6 +526,7 @@
       }).join('') + '</div>' +
       '<div class="so-det">' + r('إجمالي المنتجات', money(o.subtotal)) + (o.product_discount > 0 ? r('خصم المنتجات', '− ' + money(o.product_discount)) : '') +
       r('كود الخصم', o.promo_code ? '<span class="so-promo">' + esc(o.promo_code) + '</span> − ' + money(o.promo_discount) : '—') +
+      (Number(o.birthday_discount) > 0 ? r('🎂 خصم عيد الميلاد', '− ' + money(o.birthday_discount)) : '') +
       (disc > 0 ? r('إجمالي الخصومات', '− ' + money(disc)) : '') + (o.delivery === 'delivery' ? r('مصاريف التوصيل', money(o.shipping)) : '') +
       r('الإجمالي النهائي', '<b>' + money(o.total) + '</b>') + r('ملاحظات العميل', o.notes ? esc(o.notes) : '—') + '</div>' +
       '<div class="so-acts"><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(waNum(o.customer_phone)) + '?text=' + encodeURIComponent(msg) + '" style="background:#25D366;color:#062612">💬 واتساب العميل</a>' +

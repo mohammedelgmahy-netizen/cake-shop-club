@@ -113,7 +113,7 @@ export function nextStatuses(status, delivery) {
 const ST_AR = { pending: 'قيد المراجعة', approved: 'تم القبول', preparing: 'جاري التجهيز', ready: 'جاهز', shipped: 'تم الشحن', completed: 'تم إتمام الطلب', rejected: 'مرفوض', cancelled: 'ملغي' };
 const ORDER_COLS = `o.id, o.order_no, o.customer_id, o.customer_name, o.customer_phone, o.member_no, o.product_id, o.product_name, o.product_code,
   o.color, o.variant, o.qty, o.unit_price, o.total, o.notes, o.status, o.reject_reason, o.history, o.created_at, o.updated_at,
-  o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name, o.stock_state,
+  o.items, o.subtotal, o.product_discount, o.promo_code, o.promo_discount, o.shipping, o.method, o.delivery, o.address, o.admin_notes, o.branch_id, o.branch_name, o.stock_state, o.birthday_discount,
   o.invoice_no, o.invoice_status, o.invoice_error, o.invoice_at, o.points_awarded, o.completed_at`;
 const money2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 const PROMO_CODE = /^[A-Za-z0-9_-]{3,30}$/;
@@ -174,7 +174,7 @@ const dateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : d ? S
  * حساب الطلب: المنتجات بأسعارها الحالية + خصومات المنتجات + كود الخصم + الشحن.
  * q = sql أو transaction. lockPromo = نقفل صف الكود وقت تأكيد الطلب علشان عدد مرات الاستخدام يتحسب صح.
  */
-async function quote(q, customer, p, lockPromo) {
+async function quote(q, customer, p, lockPromo, bday) {
   const items = cleanItems(p.items);
   const ids = [...new Set(items.map((i) => i.product_id))];
   const prods = await q.unsafe(`select p.id, p.name, p.code, p.price, p.old_price, p.available, p.hidden, p.colors, p.variants, p.category_id, p.track_stock, ${STOCK_AVAIL},
@@ -249,20 +249,32 @@ async function quote(q, customer, p, lockPromo) {
     }
   }
   const promo_discount = promo && promo.ok ? promo.discount : 0;
+  // عرض عيد الميلاد: بيتطبق تلقائياً لو العرض فعال والعميل مستحق ولسه مستخدمهوش في دورة عيد الميلاد دي
+  let birthday = null, birthday_discount = 0;
+  if (bday) {
+    birthday = { type: bday.type, value: Number(bday.value) || 0, offer_text: bday.offer_text, end: bday.end, status: bday.status, discount: 0 };
+    const base = Math.max(0, items_total - promo_discount);
+    if (bday.status === 'available' && base > 0 && (bday.type === 'percent' || bday.type === 'fixed')) {
+      let d = bday.type === 'percent' ? base * Number(bday.value) / 100 : Number(bday.value);
+      if (bday.type === 'percent' && Number(bday.max) > 0) d = Math.min(d, Number(bday.max));
+      birthday_discount = birthday.discount = money2(Math.min(d, base));
+    }
+  }
   const set = await shopSettings(q);
   const delivery = p.delivery === 'delivery' ? 'delivery' : 'pickup';
   const shipping = delivery === 'delivery' && set.delivery_enabled ? money2(set.delivery_fee) : 0;
-  const total = money2(Math.max(0, items_total - promo_discount) + shipping);
+  const total = money2(Math.max(0, items_total - promo_discount - birthday_discount) + shipping);
   const brs = await branches(q);
   return {
     branches: brs, saved_address: await savedAddress(q, customer.customer_id),
-    lines, subtotal, product_discount, items_total, promo, promo_discount, delivery, shipping, total,
+    lines, subtotal, product_discount, items_total, promo, promo_discount, birthday, birthday_discount, delivery, shipping, total,
     delivery_enabled: set.delivery_enabled, delivery_fee: set.delivery_fee,
     customer: { name: customer.name, phone: customer.phone, member_no: customer.member_no },
   };
 }
 
-async function checkout(sql, c, p) {
+async function checkout(sql, c, p, ctx) {
+  const bday = await birthdayOffer(ctx, p.token);
   const method = p.method === 'cart' ? 'cart' : 'buy_now';
   const delivery = p.delivery === 'delivery' ? 'delivery' : 'pickup';
   const address = T(p.address).slice(0, 500);
@@ -271,7 +283,7 @@ async function checkout(sql, c, p) {
     await tx.unsafe("select set_config('cakeshop.actor', $1, true)", ['العميل: ' + c.name]);
     const [cnt] = await tx.unsafe("select count(*)::int n from cakeshop.mc_shop_orders where customer_id = $1 and created_at > now() - interval '1 day'", [c.customer_id]);
     if (cnt.n >= 20) throw new Error('وصلت للحد الأقصى للطلبات النهارده. كلم المحل لو محتاج حاجة.');
-    const qt = await quote(tx, c, p, true);
+    const qt = await quote(tx, c, p, true, bday);
     const badLine = qt.lines.find((l) => l.error);
     if (badLine) throw new Error((badLine.name ? '«' + badLine.name + '»: ' : '') + badLine.error);
     if (qt.promo && !qt.promo.ok) throw new Error(qt.promo.message);
@@ -293,14 +305,24 @@ async function checkout(sql, c, p) {
     const hist = JSON.stringify([{ s: 'pending', at: new Date().toISOString(), by: 'customer' }]);
     const [o] = await tx.unsafe(`insert into cakeshop.mc_shop_orders (order_no, customer_id, customer_name, customer_phone, member_no, product_id, product_name, product_code,
         color, variant, qty, unit_price, total, notes, status, history, items, subtotal, product_discount, promo_id, promo_code, promo_discount, shipping, method, delivery, address,
-        branch_id, branch_name)
+        branch_id, branch_name, birthday_discount)
       values (nextval('cakeshop.mc_shop_order_no'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14::text::jsonb, $15::text::jsonb,
-        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26) returning id, order_no`,
+        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) returning id, order_no`,
       [c.customer_id, c.name, c.phone, c.member_no, first.product_id, title, first.code || '', first.color, first.variant, qtySum, first.unit_price, qt.total, notes, hist,
         JSON.stringify(items), qt.subtotal, qt.product_discount, qt.promo && qt.promo.ok ? qt.promo.id : null, qt.promo && qt.promo.ok ? qt.promo.code : '',
-        qt.promo_discount, qt.shipping, method, delivery, delivery === 'delivery' ? address : '', branch ? branch.id : '', branch ? branch.name : '']);
-    return { id: o.id, order_no: Number(o.order_no), total: qt.total };
+        qt.promo_discount, qt.shipping, method, delivery, delivery === 'delivery' ? address : '', branch ? branch.id : '', branch ? branch.name : '', qt.birthday_discount]);
+    return { id: o.id, order_no: Number(o.order_no), total: qt.total, birthday_discount: qt.birthday_discount };
+  }).then(async (r) => {
+    // تسجيل إن العميل استخدم عرض عيد الميلاد (مرة واحدة في دورة عيد الميلاد)
+    if (r.birthday_discount > 0 && ctx && ctx.publicApi) {
+      try { await ctx.publicApi('_bdayUse', { token: p.token, invoice_no: invoiceForOrder(r.order_no), discount: r.birthday_discount }); } catch (e) { console.error(e); }
+    }
+    return r;
   });
+}
+async function birthdayOffer(ctx, token) {
+  if (!ctx || !ctx.publicApi) return null;
+  try { const r = await ctx.publicApi('_bdayOffer', { token: T(token) }); return r && r.ok ? r.data : null; } catch (e) { return null; }
 }
 
 async function withImages(sql, rows) {
@@ -314,13 +336,14 @@ async function withImages(sql, rows) {
   return rows.map((o) => publicOrder(o, map));
 }
 
-async function customerShop(sql, action, p) {
+async function customerShop(sql, action, p, ctx) {
   const c = await customerByToken(sql, p.token);
   if (action === 'myOrders') {
     const rows = await sql.unsafe(`select ${ORDER_COLS} from cakeshop.mc_shop_orders o where o.customer_id = $1 order by o.created_at desc limit 200`, [c.customer_id]);
     return withImages(sql, rows);
   }
-  if (action === 'quote') return quote(sql, c, p, false);
+  if (action === 'quote') return quote(sql, c, p, false, await birthdayOffer(ctx, p.token));
+  if (action === 'myBirthday') return { offer: await birthdayOffer(ctx, p.token) };
   if (action === 'mySummary') return customerSummary(sql, c);
   if (action === 'myNotes') { // إشعارات العميل (النقاط اللي اتضافت على طلباته ...)
     const rows = await sql.unsafe(`select id, title, body, ref_type, ref_id, created_at, read_at from cakeshop.mc_shop_customer_notes
@@ -338,9 +361,9 @@ async function customerShop(sql, action, p) {
       on conflict (customer_id) do update set address = excluded.address, updated_at = now()`, [c.customer_id, a]);
     return { address: a };
   }
-  if (action === 'checkout') return checkout(sql, c, p);
+  if (action === 'checkout') return checkout(sql, c, p, ctx);
   if (action === 'order') { // النسخة القديمة من الصفحة (منتج واحد)
-    return checkout(sql, c, { items: [{ product_id: p.product_id, color: p.color, variant: p.variant, qty: p.qty }], notes: p.notes, method: 'buy_now' });
+    return checkout(sql, c, { token: p.token, items: [{ product_id: p.product_id, color: p.color, variant: p.variant, qty: p.qty }], notes: p.notes, method: 'buy_now' }, ctx);
   }
   if (action === 'cancelOrder') {
     if (!UUID.test(T(p.id))) throw new Error('الطلب غير موجود');
@@ -408,7 +431,7 @@ function publicOrder(o, imgs) {
     shipping: Number(o.shipping), method: o.method, delivery: o.delivery, address: o.address || '', branch_name: o.branch_name || '',
     status: o.status, reject_reason: o.reject_reason, image: items[0] ? items[0].image : '', created_at: o.created_at, updated_at: o.updated_at,
     history: (Array.isArray(o.history) ? o.history : []).map((h) => ({ s: h.s, at: h.at })),
-    points: Number(o.points_awarded || 0), invoiced: !!o.invoice_no,
+    points: Number(o.points_awarded || 0), invoiced: !!o.invoice_no, birthday_discount: Number(o.birthday_discount || 0),
   };
 }
 
@@ -537,7 +560,7 @@ export async function handleShop(body, ctx) {
   try {
     if (fn === 'shop') {
       if (args[0] === 'catalog') return ok(await catalog(sql));
-      if (['order', 'quote', 'mySummary', 'myNotes', 'readNotes', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}));
+      if (['order', 'quote', 'mySummary', 'myNotes', 'readNotes', 'myBirthday', 'saveAddress', 'checkout', 'myOrders', 'cancelOrder'].indexOf(args[0]) >= 0) return ok(await customerShop(sql, args[0], args[1] && typeof args[1] === 'object' ? args[1] : {}, ctx));
       return bad('طلب غير معروف');
     }
     // ---------- الإدارة ----------

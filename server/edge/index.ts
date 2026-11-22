@@ -56,6 +56,12 @@ async function adminApi(token: string, action: string, payload: unknown, rid: st
   return (out && out.result) || { ok: false, error: 'حدث خطأ في الخادم، حاول مرة أخرى' };
 }
 
+// عمليات داخلية في نظام الولاء للمتجر (زي عرض عيد الميلاد) — مش متاحة من المتصفح مباشرة
+async function publicApi(action: string, payload: unknown) {
+  const out: any = await handle({ fn: 'publicApi', args: [action, payload] }, db, { crypto, Buffer, uploadImage });
+  return (out && out.result) || { ok: false, error: 'حدث خطأ في الخادم، حاول مرة أخرى' };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return new Response('CAKE SHOP CLUB API', { headers: CORS });
@@ -67,10 +73,11 @@ Deno.serve(async (req: Request) => {
     const fn = (body as any)?.fn;
     if (fn === 'shop' || fn === 'shopAdmin') {
       return json(await handleShop(body, {
-        sql, verifyAdmin, adminApi,
+        sql, verifyAdmin, adminApi, publicApi,
         upload: (d: string) => storeImage(d, 'cs-products', 'product', 'تعذر رفع الصورة، حاول مرة أخرى'),
       }));
     }
+    if (fn === 'publicApi' && String((body as any)?.args?.[0] || '').startsWith('_')) return json({ result: { ok: false, error: 'عملية غير معروفة' } });
     const out = await handle(body, db, { crypto, Buffer, uploadImage });
     return json(out);
   } catch (e) {
