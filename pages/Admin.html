@@ -1239,6 +1239,8 @@ function viewBirthdays(v) {
       '<div class="kpi"><span>عرضهم شغال دلوقتي</span><b id="bdCur">' + fmtNum(cur.length) + '</b></div>' +
       '<div class="kpi"><span>مستنيين تهنئة</span><b id="bdPend">' + fmtNum(pending().length) + '</b></div>' +
       '<div class="kpi"><span>عملاء بدون تاريخ ميلاد</span><b>' + fmtNum(r.no_birthdate) + '</b></div></div>' +
+      '<div class="card" style="margin-bottom:12px"><h2>📅 مواليد العملاء</h2><div class="toolbar" id="bnTabs"><button class="btn sm" type="button" data-bn="today">النهارده</button><button class="btn ghost sm" type="button" data-bn="week">الأسبوع</button><button class="btn ghost sm" type="button" data-bn="range">فترة</button></div>' +
+        '<div id="bnCtl" style="margin:8px 0"></div><div id="bnList"></div></div>' +
       '<div class="card" style="margin-bottom:12px"><h2>🎂 عيد ميلادهم دلوقتي</h2>' +
       (cur.length ? '<p class="small muted">كل عميل بتتبعتله تهنئة مرة واحدة بس في السنة. اضغط الزرار، واتساب هيفتح والرسالة جاهزة، دوس إرسال وارجع هنا.</p>' +
         '<a class="btn wa" id="bdNext" target="_blank" rel="noopener" href="#" style="font-size:16px;padding:14px;margin-bottom:6px"></a><div class="small muted" id="bdNextInfo" style="text-align:center;margin-bottom:10px"></div>' +
@@ -1253,6 +1255,46 @@ function viewBirthdays(v) {
         up.map(function (x) { return '<tr class="click" data-cid="' + esc(x.customer_id) + '"><td>' + esc(x.next) + '</td><td>' + esc(x.name) + ' <span class="small muted">' + esc(x.member_no) + '</span></td><td style="direction:ltr;text-align:end">' + esc(x.phone) + '</td><td>' + (x.wa_opt_in ? badge('موافق', 'green') : badge('لا', 'gray')) + '</td></tr>'; }).join('') +
         '</table></div>' : '<div class="empty">مفيش أعياد ميلاد في الفترة الجاية</div>') + '</div>';
     if ($('#bdSet')) $('#bdSet').onclick = function () { go('settings', { back: ['birthdays', 'أعياد الميلاد'] }); };
+    // مواليد العملاء: من تاريخ الميلاد المسجل في كارت العميل مباشرة
+    var born = r.born || [], DAYS = ['الأحد', 'الاتنين', 'التلات', 'الأربع', 'الخميس', 'الجمعة', 'السبت'];
+    var dOf = function (iso) { var p = iso.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); };
+    var isoOf = function (dt) { return dt.toISOString().slice(0, 10); };
+    var addD = function (iso, n) { var dt = dOf(iso); dt.setUTCDate(dt.getUTCDate() + n); return isoOf(dt); };
+    var weekStart = function (iso) { return addD(iso, -((dOf(iso).getUTCDay() + 1) % 7)); };
+    var BN = { tab: 'today', ws: weekStart(r.today), day: '', from: r.today, to: addD(r.today, 6) };
+    var md = function (iso) { return iso.slice(5); };
+    var inRange = function (b, f, t) { var m = md(b), a = md(f), z = md(t); return a <= z ? (m >= a && m <= z) : (m >= a || m <= z); };
+    var bnRows = function (list) {
+      if (!list.length) return '<div class="empty">مفيش عملاء عيد ميلادهم في الفترة دي</div>';
+      return '<div class="tblwrap"><table class="tbl"><tr><th>العميل</th><th>كود العميل</th><th>تاريخ الميلاد</th><th>الموبايل</th><th>الفرع</th></tr>' +
+        list.map(function (x) { return '<tr class="click" data-bn-cid="' + esc(x.customer_id) + '"><td>' + esc(x.name) + '</td><td>' + esc(x.member_no) + '</td><td style="direction:ltr;text-align:end">' + esc(x.birthdate) + '</td><td style="direction:ltr;text-align:end">' + esc(x.phone) + '</td><td>' + (esc(x.branch) || '—') + '</td></tr>'; }).join('') + '</table></div>';
+    };
+    var bnSort = function (list) { return list.slice().sort(function (a, b) { return md(a.birthdate) < md(b.birthdate) ? -1 : md(a.birthdate) > md(b.birthdate) ? 1 : 0; }); };
+    var paintBn = function () {
+      $all('[data-bn]', v).forEach(function (b) { b.className = 'btn sm' + (b.dataset.bn === BN.tab ? '' : ' ghost'); });
+      var ctl = $('#bnCtl'), list;
+      if (BN.tab === 'today') { ctl.innerHTML = '<div class="small muted">النهارده ' + esc(r.today) + '</div>'; list = born.filter(function (x) { return md(x.birthdate) === md(r.today); }); }
+      else if (BN.tab === 'week') {
+        var we = addD(BN.ws, 6), days = [];
+        for (var i = 0; i < 7; i++) days.push(addD(BN.ws, i));
+        ctl.innerHTML = '<div class="toolbar"><button class="btn ghost sm" type="button" id="bnPrev">‹ الأسبوع اللي فات</button><b class="small">' + esc(BN.ws) + ' ← ' + esc(we) + '</b><button class="btn ghost sm" type="button" id="bnNext">الأسبوع الجاي ›</button></div>' +
+          '<div class="toolbar" style="margin-top:6px"><button class="btn sm' + (BN.day ? ' ghost' : '') + '" type="button" data-bnd="">كل الأسبوع</button>' +
+          days.map(function (dd) { var c = born.filter(function (x) { return md(x.birthdate) === md(dd); }).length; return '<button class="btn sm' + (BN.day === dd ? '' : ' ghost') + '" type="button" data-bnd="' + dd + '">' + DAYS[dOf(dd).getUTCDay()] + ' ' + md(dd) + (c ? ' (' + c + ')' : '') + '</button>'; }).join('') + '</div>';
+        list = born.filter(function (x) { return BN.day ? md(x.birthdate) === md(BN.day) : inRange(x.birthdate, BN.ws, we); });
+        $('#bnPrev').onclick = function () { BN.ws = addD(BN.ws, -7); BN.day = ''; paintBn(); };
+        $('#bnNext').onclick = function () { BN.ws = addD(BN.ws, 7); BN.day = ''; paintBn(); };
+        $all('[data-bnd]', ctl).forEach(function (b) { b.onclick = function () { BN.day = b.dataset.bnd; paintBn(); }; });
+      } else {
+        ctl.innerHTML = '<div class="row"><label class="small">من <input type="date" id="bnFrom" value="' + esc(BN.from) + '"></label><label class="small">إلى <input type="date" id="bnTo" value="' + esc(BN.to) + '"></label></div>';
+        list = BN.from && BN.to ? born.filter(function (x) { return inRange(x.birthdate, BN.from, BN.to); }) : [];
+        $('#bnFrom').onchange = function () { BN.from = this.value; paintBn(); };
+        $('#bnTo').onchange = function () { BN.to = this.value; paintBn(); };
+      }
+      $('#bnList').innerHTML = '<div class="small muted" style="margin-bottom:6px">' + fmtNum(list.length) + ' عميل</div>' + bnRows(bnSort(list));
+      $all('[data-bn-cid]', v).forEach(function (tr) { tr.onclick = function () { openCustomer(tr.dataset.bnCid); }; });
+    };
+    $all('[data-bn]', v).forEach(function (b) { b.onclick = function () { BN.tab = b.dataset.bn; BN.day = ''; paintBn(); }; });
+    paintBn();
     var bdToggle = function (on, btn) { busy(btn, true); call('saveSettings', { values: { bday_enabled: on ? 'true' : 'false' } }, true).then(function () { toast(on ? 'تم تفعيل عرض عيد الميلاد ✓' : 'تم إيقاف عرض عيد الميلاد'); go('birthdays'); }).catch(function (e) { busy(btn, false); toast(e.message, true); }); };
     if ($('#bdOn')) $('#bdOn').onclick = function () { bdToggle(true, this); };
     if ($('#bdOff')) $('#bdOff').onclick = function () { bdToggle(false, this); };
