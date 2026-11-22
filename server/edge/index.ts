@@ -4,8 +4,8 @@
 import postgres from 'npm:postgres@3.4.5';
 import * as crypto from 'node:crypto';
 import { Buffer } from 'node:buffer';
-import { handle } from 'https://cdn.jsdelivr.net/gh/mohammedelgmahy-netizen/cake-shop-club@e366a97a88ce40b19c903391994d84d9ca314c46/server/bundle.js';
-import { handleShop } from 'https://cdn.jsdelivr.net/gh/mohammedelgmahy-netizen/cake-shop-club@e366a97a88ce40b19c903391994d84d9ca314c46/server/shop.js';
+import { handle } from 'https://cdn.jsdelivr.net/gh/mohammedelgmahy-netizen/cake-shop-club@ce64bd542ee21f25c7e2490030f73b424dfa0eee/server/bundle.js';
+import { handleShop } from 'https://cdn.jsdelivr.net/gh/mohammedelgmahy-netizen/cake-shop-club@ce64bd542ee21f25c7e2490030f73b424dfa0eee/server/shop.js';
 
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { prepare: false, max: 2, idle_timeout: 60 });
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
