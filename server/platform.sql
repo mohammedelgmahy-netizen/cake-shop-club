@@ -1,0 +1,19 @@
+-- Cake Shop SaaS — طبقة المنصة متعددة المحلات (مطبقة على قاعدة البيانات 2026-11-23)
+-- migrations: cakeshop_platform_tenants + cakeshop_platform_clone_schema
+--
+-- الفكرة: كل محل مشترك ليه schema منفصلة (t_<code>) فيها نفس جداول Cake Shop بالظبط.
+--   csplatform.tenants      المحلات المشتركة + حالة الاشتراك (trial / active / suspended)
+--   csplatform.payments     الدفعات اليدوية (فودافون كاش / إنستاباي / كاش ...)
+--   csplatform.settings     أيام التجربة، السعر الافتراضي، التسجيل مفتوح/مقفول، تعليمات الدفع
+--   csplatform.admins/sessions  دخول صاحب المنصة (platform.html)
+--   cs_template             قالب فاضي متنسخ من هيكل cakeshop (بدون بيانات)
+--   csplatform.clone_structure(src, dst)  ينسخ الهيكل كامل (جداول، تسلسلات، فهارس، قيود، دوال، تريجرات)
+--   csplatform.provision_schema(dst)      خزنة لمحل جديد من القالب + الأقسام الافتراضية
+--
+-- مهم: أي تعديل مستقبلي على جداول cakeshop لازم يتطبق كمان على cs_template وعلى كل t_* schemas:
+--   do $$ declare s text; begin
+--     for s in select schema_name from csplatform.tenants union select 'cs_template' loop
+--       execute format('alter table %I.mc_xxx add column if not exists ...', s);
+--     end loop; end $$;
+--
+-- النص الكامل للـ migrations موجود في سجل migrations بتاع Supabase بنفس الأسماء.

@@ -9,6 +9,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
 <script>
 window.MC_FUNCTION_URL = window.MC_FUNCTION_URL || "https://lhamdnaxioxqptkylvkg.supabase.co/functions/v1/cakeshop?forceFunctionRegion=ap-south-1";
+/* منصة متعددة المحلات: رابط المحل /<code> → كل الطلبات تروح لخزنة المحل ده بس، وتخزين المتصفح منفصل لكل محل */
+(function(){var m=location.pathname.match(/\/([a-z][a-z0-9]{2,29})$/);if(!m)return;var c=m[1];window.MC_SHOP=c;window.mcTextLogo=function(n,sq){n=String(n||'').slice(0,40);var w=sq?160:Math.max(240,Math.min(900,n.length*34+60)),h=sq?160:110,fs=sq?84:52;var e=n.replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';';});return'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#5EE0DB"/><stop offset="1" stop-color="#EC5B9C"/></linearGradient></defs>'+(sq?'<rect width="160" height="160" rx="40" fill="#24121F"/>':'')+'<text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="Cairo,Tahoma,Arial,sans-serif" font-weight="800" font-size="'+fs+'" fill="url(#g)">'+e+'</text></svg>');};var u=window.MC_FUNCTION_URL;if(u&&u.indexOf('shop=')<0)window.MC_FUNCTION_URL=u+(u.indexOf('?')>=0?'&':'?')+'shop='+c;if(window.__mcLs)return;window.__mcLs=1;try{var P=Storage.prototype,g=P.getItem,s=P.setItem,r=P.removeItem,k=function(x){return c+':'+x;};P.getItem=function(x){return g.call(this,k(x));};P.setItem=function(x,v){return s.call(this,k(x),v);};P.removeItem=function(x){return r.call(this,k(x));};}catch(e){}})();
+/* المحلات المشتركة: أي نص ثابت فيه اسم Cake Shop بيظهر باسم المحل نفسه */
+(function(){if(!window.MC_SHOP||window.__mcBrand)return;window.__mcBrand=1;var RE=/Cake Shop Dessert Cafe|كيك شوب ديزرت كافيه|Cake Shop/g,RE2=/Cake%20Shop%20Dessert%20Cafe|Cake%20Shop/g;function nm(){var b=window.__MC_BOOT__||{},s=b.settings||{};return window.MC_SHOP_NAME||s.shop_name_ar||s.shop_name||s.program_name||'';}function fx(n){var v=nm();if(!v)return;if(n.nodeType===3){if(n.nodeValue.indexOf('Cake Shop')>=0||n.nodeValue.indexOf('كيك شوب')>=0)n.nodeValue=n.nodeValue.replace(RE,v);return;}if(n.nodeType!==1)return;['alt','title','placeholder','content'].forEach(function(a){var x=n.getAttribute&&n.getAttribute(a);if(x&&x.indexOf('Cake Shop')>=0)n.setAttribute(a,x.replace(RE,v));});var h=n.getAttribute&&n.getAttribute('href');if(h&&h.indexOf('Cake%20Shop')>=0)n.setAttribute('href',h.replace(RE2,encodeURIComponent(v)));if(n.tagName==='SCRIPT'||n.tagName==='STYLE')return;for(var c=n.firstChild;c;c=c.nextSibling)fx(c);}function all(){if(document.documentElement)fx(document.documentElement);if(document.title.indexOf('Cake Shop')>=0&&nm())document.title=document.title.replace(RE,nm());}try{new MutationObserver(function(ms){ms.forEach(function(m){if(m.type==='characterData'||m.type==='attributes')fx(m.target);else for(var i=0;i<m.addedNodes.length;i++)fx(m.addedNodes[i]);});if(document.title.indexOf('Cake Shop')>=0&&nm())document.title=document.title.replace(RE,nm());}).observe(document,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['alt','title','href','placeholder']});}catch(e){}document.addEventListener('DOMContentLoaded',all);setTimeout(all,0);})();
 window.__mcPost = window.__mcPost || function (body) {
   return fetch(window.MC_FUNCTION_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: body }).then(function (r) { return r.json(); });
 };
@@ -87,6 +91,7 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
   var KEY = String(BOOT.tb || new URLSearchParams(location.search).get('tb') || '').toLowerCase();
   var app = document.getElementById('app'), bar = document.getElementById('bar'), barBtn = document.getElementById('barBtn');
   var D = null, VIEW = 'home', CAT = '', CART = [], Q = null, LASTST = {}, NOTES = '';
+  function tLogo() { var sh = (D && D.shop) || {}; if (!window.MC_SHOP) return 'logo-wide.png'; return sh.logo_url || window.mcTextLogo(sh.name || ''); }
   var ST = { pending: 'تم استلام طلبك', approved: 'تم تأكيد الطلب', preparing: 'جاري تجهيز طلبك', ready: 'طلبك جاهز', served: 'تم تقديم طلبك', completed: 'مكتمل', cancelled: 'ملغي' };
   var MSG = { approved: '✅ طلبك #N اتأكد', preparing: '👩‍🍳 جاري تجهيز طلبك #N', ready: '🍰 طلبك #N جاهز', served: '🍽️ تم تقديم طلبك #N، بالهنا والشفا', cancelled: '🚫 طلبك #N اتلغى' };
   var HELP = [['help', '🙋 طلب مساعدة'], ['bill', '🧾 طلب الحساب'], ['order', '❓ استفسار عن الطلب']];
@@ -112,7 +117,7 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
   function stockOf(p, c, v) { if (!p.track_stock || !p.stock) return Infinity; return Number(p.stock[(c || '') + '|' + (v || '')] || 0); }
 
   function head() {
-    return '<div class="hd"><img src="logo-wide.png" alt="Cake Shop"><span class="tbl">🍽️ ' + esc(D.table.name) + '</span></div>';
+    return '<div class="hd"><img src="' + tLogo() + '" alt=""><span class="tbl">🍽️ ' + esc(D.table.name) + '</span></div>';
   }
   function paintBar() {
     var n = cartCount();
@@ -298,10 +303,10 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
 
   if (!KEY) { app.innerHTML = '<div class="err">امسح الـ QR اللي على الترابيزة علشان تفتح المنيو.</div>'; return; }
   rpc('tableBoot').then(function (d) {
-    D = d; track(d.orders, true); document.title = 'Cake Shop · ' + d.table.name; render();
+    D = d; if (d.shop && d.shop.name) window.MC_SHOP_NAME = d.shop.name; track(d.orders, true); document.title = (window.MC_SHOP ? ((d.shop && d.shop.name) || '') : 'Cake Shop') + ' · ' + d.table.name; render();
     setInterval(function () { if (!document.hidden) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
-  }).catch(function (e) { app.innerHTML = '<div class="hd"><img src="logo-wide.png" alt="Cake Shop"></div><div class="err">' + esc(e.message) + '</div><button class="btn ghost" type="button" onclick="location.reload()">إعادة المحاولة</button>'; });
+  }).catch(function (e) { app.innerHTML = '<div class="hd"><img src="' + tLogo() + '" alt=""></div><div class="err">' + esc(e.message) + '</div><button class="btn ghost" type="button" onclick="location.reload()">إعادة المحاولة</button>'; });
 })();
 </script>
 </body>

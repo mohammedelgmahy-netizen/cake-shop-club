@@ -17,16 +17,22 @@
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window.__mcInstallPrompt = e; });
+var __mcRedir = /\/[a-z][a-z0-9]{2,29}\/$/.test(location.pathname);
+if (__mcRedir) location.replace(location.pathname.slice(0, -1) + location.search + location.hash);
 (function(){
+  if (__mcRedir) return;
   var FN = "https://lhamdnaxioxqptkylvkg.supabase.co/functions/v1/cakeshop?forceFunctionRegion=ap-south-1";
+  if (window.MC_SHOP || /\/[a-z][a-z0-9]{2,29}$/.test(location.pathname)) document.getElementById('m').textContent = '';
   var params = {}; new URLSearchParams(location.search).forEach(function(v,k){ params[k]=v; });
   var base = location.href.split('#')[0].split('?')[0];
   function fail(){ document.getElementById('m').innerHTML = 'تعذر الاتصال. تأكد من الإنترنت ثم <a href="" style="color:#5EE0DB">أعد المحاولة</a>'; }
-  var V = {"Register":"375c7dab69","Card":"34cca0d7d6","Unsub":"463c3be20d","Message":"4a901c5b01","Admin":"6868b2922f","Table":"03e786a20a"};
+  var V = {"Register":"b61a3c2bd2","Card":"26182140ca","Unsub":"64ad0cb250","Message":"0687b5796d","Admin":"74ded79c68","Table":"72cc29eee7"};
   var getPage = function(n){ return fetch(base.replace(/[^/]*$/, '') + 'pages/' + n + '.html?v=' + V[n]).then(function(r){ if (!r.ok) throw new Error('page'); return r.text(); }); };
   var guess = params.tb ? 'Table' : params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
   var early = getPage(guess); early.catch(function(){});
   window.MC_FUNCTION_URL = FN;
+/* منصة متعددة المحلات: رابط المحل /<code> → كل الطلبات تروح لخزنة المحل ده بس، وتخزين المتصفح منفصل لكل محل */
+(function(){var m=location.pathname.match(/\/([a-z][a-z0-9]{2,29})$/);if(!m)return;var c=m[1];window.MC_SHOP=c;window.mcTextLogo=function(n,sq){n=String(n||'').slice(0,40);var w=sq?160:Math.max(240,Math.min(900,n.length*34+60)),h=sq?160:110,fs=sq?84:52;var e=n.replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';';});return'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#5EE0DB"/><stop offset="1" stop-color="#EC5B9C"/></linearGradient></defs>'+(sq?'<rect width="160" height="160" rx="40" fill="#24121F"/>':'')+'<text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="Cairo,Tahoma,Arial,sans-serif" font-weight="800" font-size="'+fs+'" fill="url(#g)">'+e+'</text></svg>');};var u=window.MC_FUNCTION_URL;if(u&&u.indexOf('shop=')<0)window.MC_FUNCTION_URL=u+(u.indexOf('?')>=0?'&':'?')+'shop='+c;if(window.__mcLs)return;window.__mcLs=1;try{var P=Storage.prototype,g=P.getItem,s=P.setItem,r=P.removeItem,k=function(x){return c+':'+x;};P.getItem=function(x){return g.call(this,k(x));};P.setItem=function(x,v){return s.call(this,k(x),v);};P.removeItem=function(x){return r.call(this,k(x));};}catch(e){}})();
   window.__mcPost = function(body){
   var url = window.MC_FUNCTION_URL;
   var send = function(ct){ var c = window.AbortController ? new AbortController() : null; var t = c ? setTimeout(function(){ c.abort(); }, window.__mcTimeout || (body.length > 200000 ? 120000 : 30000)) : 0; return fetch(url, { method: 'POST', headers: {'Content-Type': ct}, body: body, signal: c ? c.signal : undefined }).then(function(r){ clearTimeout(t); if (r.status >= 400 && r.status !== 500) throw new Error('ct'); return r.json(); }, function(e){ clearTimeout(t); throw e; }); };

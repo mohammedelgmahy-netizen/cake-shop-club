@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#170B14">
+<title>سجّل محلك</title>
+<meta property="og:title" content="سجّل محلك — برنامج ولاء العملاء">
+<meta property="og:description" content="نقاط وعروض وطلبات أونلاين وترابيزات لمحلك في دقيقة">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#170B14;--card:#24121F;--line:rgba(255,255,255,.10);--text:#F6E9F1;--muted:#C9A9BC;--teal:#5EE0DB;--pink:#EC5B9C;--bad:#FF8FA8}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Cairo,system-ui,Tahoma,sans-serif}
+.wrap{max-width:460px;margin:0 auto;padding:28px 16px 48px}
+h1{font-size:26px;margin:8px 0 4px;line-height:1.4}
+.sub{color:var(--muted);margin:0 0 20px;line-height:1.8}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font:inherit;font-size:16px}
+input:focus{outline:none;border-color:var(--teal)}
+button{width:100%;margin-top:20px;padding:14px;border:0;border-radius:12px;background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14;font:inherit;font-weight:800;font-size:17px;cursor:pointer}
+button:disabled{opacity:.6}
+.err{color:var(--bad);margin-top:12px;font-size:14px;min-height:1em}
+.feat{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 18px}
+.feat div{background:rgba(94,224,219,.08);border:1px solid rgba(94,224,219,.25);border-radius:12px;padding:8px 10px;font-size:13px}
+.ok h2{margin:0 0 8px;color:var(--teal)}
+.link{direction:ltr;text-align:left;word-break:break-all;background:rgba(255,255,255,.05);border:1px dashed var(--line);border-radius:10px;padding:10px;margin:6px 0 4px;font-size:14px}
+.hint{color:var(--muted);font-size:13px;line-height:1.8}
+a.btn{display:block;text-align:center;text-decoration:none;margin-top:16px;padding:14px;border-radius:12px;background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14;font-weight:800}
+.hidden{display:none}
+</style>
+</head><body>
+<div class="wrap">
+  <h1 id="title">سجّل محلك</h1>
+  <p class="sub">برنامج ولاء كامل لمحلك: نقاط وعروض للعملاء، طلبات أونلاين، ترابيزات بالـ QR، كاشير وتقارير. <b id="trial">تجربة مجانية</b>، ومن غير أي تجهيزات.</p>
+  <div class="feat"><div>⭐ نقاط ومكافآت</div><div>🛒 طلبات أونلاين</div><div>🍽️ ترابيزات QR</div><div>📊 تقارير ومبيعات</div></div>
+
+  <form class="card" id="f" autocomplete="on">
+    <label for="shop">اسم المحل</label>
+    <input id="shop" required maxlength="60" placeholder="مثلاً: حلواني السعادة">
+    <label for="owner">اسمك</label>
+    <input id="owner" maxlength="60" autocomplete="name">
+    <label for="email">الإيميل (هتدخل بيه لوحة التحكم)</label>
+    <input id="email" type="email" required dir="ltr" autocomplete="email">
+    <label for="phone">رقم الموبايل / واتساب المحل</label>
+    <input id="phone" type="tel" dir="ltr" maxlength="20" autocomplete="tel" placeholder="01xxxxxxxxx">
+    <label for="pw">كلمة السر (8 حروف أو أرقام على الأقل)</label>
+    <input id="pw" type="password" required minlength="8" dir="ltr" autocomplete="new-password">
+    <button id="go" type="submit">إنشاء المحل</button>
+    <div class="err" id="err"></div>
+  </form>
+
+  <div class="card ok hidden" id="ok">
+    <h2>محلك جاهز 🎉</h2>
+    <div class="hint">رابط لوحة التحكم بتاعتك (احفظه):</div>
+    <div class="link" id="adm"></div>
+    <div class="hint">رابط المحل للعملاء (للتسجيل في كارت الولاء والطلب):</div>
+    <div class="link" id="pub"></div>
+    <div class="hint">ادخل بالإيميل <b id="usr" dir="ltr"></b> وكلمة السر اللي اخترتها.</div>
+    <a class="btn" id="goAdm" href="#">ادخل لوحة التحكم</a>
+  </div>
+</div>
+<script>
+(function () {
+  var FN = "https://lhamdnaxioxqptkylvkg.supabase.co/functions/v1/cakeshop?forceFunctionRegion=ap-south-1";
+  var site = location.origin + location.pathname.replace(/[^/]*$/, '');
+  function $(id) { return document.getElementById(id); }
+  function post(args) {
+    return fetch(FN, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ fn: 'platform', args: args }) })
+      .then(function (r) { return r.json(); }).then(function (j) { var r = j && j.result; if (!r) throw new Error('تعذر الاتصال، حاول تاني'); if (!r.ok) throw new Error(r.error); return r.data; });
+  }
+  post(['info', {}]).then(function (i) {
+    if (i.platform_name) document.title = 'سجّل محلك — ' + i.platform_name;
+    $('trial').textContent = 'تجربة مجانية ' + i.trial_days + ' يوم';
+    if (!i.signup_open) { $('f').innerHTML = '<div class="hint">التسجيل مقفول حالياً. تواصل معنا عشان نفتحلك حساب.</div>'; }
+  }).catch(function () {});
+  $('f').addEventListener('submit', function (e) {
+    e.preventDefault();
+    $('err').textContent = ''; $('go').disabled = true; $('go').textContent = 'بنجهز محلك...';
+    post(['signup', { shop_name: $('shop').value, owner_name: $('owner').value, email: $('email').value, phone: $('phone').value, password: $('pw').value, site: site }])
+      .then(function (r) {
+        $('f').classList.add('hidden'); $('ok').classList.remove('hidden');
+        $('adm').textContent = r.admin_url; $('pub').textContent = r.url; $('usr').textContent = r.username; $('goAdm').href = r.admin_url;
+      })
+      .catch(function (err) { $('err').textContent = err.message || 'حصل خطأ، حاول تاني'; })
+      .then(function () { $('go').disabled = false; $('go').textContent = 'إنشاء المحل'; });
+  });
+})();
+</script>
+</body></html>

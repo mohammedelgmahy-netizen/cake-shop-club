@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#170B14">
+<meta name="robots" content="noindex,nofollow">
+<title>إدارة المنصة</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#170B14;--card:#24121F;--line:rgba(255,255,255,.10);--text:#F6E9F1;--muted:#C9A9BC;--teal:#5EE0DB;--pink:#EC5B9C;--bad:#FF8FA8;--gold:#FFD27A}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Cairo,system-ui,Tahoma,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font:inherit;font-size:15px}
+select option{background:var(--card)}
+textarea{min-height:70px}
+button,.b{padding:9px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.06);color:var(--text);font:inherit;font-weight:700;cursor:pointer;font-size:14px}
+button.p{background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14;border:0}
+button.r{border-color:rgba(255,143,168,.5);color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.stat b{display:block;font-size:22px}
+.stat span{color:var(--muted);font-size:13px}
+.t{display:grid;gap:10px}
+.shop{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.shop h3{margin:0 0 4px;font-size:17px}
+.meta{color:var(--muted);font-size:13px;line-height:1.9;word-break:break-word}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;margin-inline-start:6px}
+.g{background:rgba(94,224,219,.15);color:var(--teal)}.y{background:rgba(255,210,122,.15);color:var(--gold)}.x{background:rgba(255,143,168,.15);color:var(--bad)}
+.err{color:var(--bad);font-size:14px;margin-top:8px;min-height:1em}
+.hidden{display:none}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.grid2{grid-template-columns:1fr}}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto;z-index:9}
+.modal .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;width:100%;max-width:520px}
+.modal h2{margin:0 0 6px;font-size:18px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
+.ltr{direction:ltr;unicode-bidi:embed}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0E2E2D;border:1px solid var(--teal);color:var(--text);padding:10px 16px;border-radius:12px;z-index:10}
+</style>
+</head><body>
+<div class="wrap">
+  <div id="loginV" class="card" style="max-width:380px;margin:60px auto">
+    <h1>إدارة المنصة</h1>
+    <form id="lf">
+      <label>اسم المستخدم</label><input id="lu" dir="ltr" autocomplete="username">
+      <label>كلمة السر</label><input id="lp" type="password" dir="ltr" autocomplete="current-password">
+      <button class="p" style="width:100%;margin-top:14px">دخول</button>
+      <div class="err" id="le"></div>
+    </form>
+  </div>
+
+  <div id="appV" class="hidden">
+    <div class="top">
+      <h1>المحلات المشتركة</h1>
+      <div class="row" style="margin:0">
+        <button id="copySignup">📋 نسخ رابط التسجيل</button>
+        <button id="setBtn">⚙️ إعدادات المنصة</button>
+        <button id="pwBtn">🔑 كلمة السر</button>
+        <button id="outBtn">خروج</button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <input id="q" placeholder="ابحث باسم المحل أو الإيميل أو الموبايل" style="margin-bottom:12px">
+    <div class="t" id="list"></div>
+  </div>
+</div>
+<div id="mroot"></div>
+<script>
+(function () {
+  var FN = "https://lhamdnaxioxqptkylvkg.supabase.co/functions/v1/cakeshop?forceFunctionRegion=ap-south-1";
+  var SITE = location.origin + location.pathname.replace(/[^/]*$/, '');
+  var TOK = '', DATA = null;
+  try { TOK = sessionStorage.getItem('cs_platform_tok') || ''; } catch (e) {}
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function post(action, p) {
+    p = p || {}; p.token = TOK;
+    return fetch(FN, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ fn: 'platform', args: [action, p] }) })
+      .then(function (r) { return r.json(); }).then(function (j) {
+        var r = j && j.result; if (!r) throw new Error('تعذر الاتصال');
+        if (!r.ok) { if (/الجلسة|سجّل الدخول/.test(r.error)) { setTok(''); showLogin(); } throw new Error(r.error); }
+        return r.data;
+      });
+  }
+  function setTok(t) { TOK = t; try { if (t) sessionStorage.setItem('cs_platform_tok', t); else sessionStorage.removeItem('cs_platform_tok'); } catch (e) {} }
+  function toast(m) { var el = document.createElement('div'); el.className = 'toast'; el.textContent = m; document.body.appendChild(el); setTimeout(function () { el.remove(); }, 2600); }
+  function day(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return iso; } }
+  function isoDate(iso) { if (!iso) return ''; var d = new Date(iso); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function money(n) { return Number(n || 0).toLocaleString('ar-EG') + ' ج.م'; }
+  function showLogin() { $('appV').classList.add('hidden'); $('loginV').classList.remove('hidden'); }
+  function modal(html) { $('mroot').innerHTML = '<div class="modal" id="mdl"><div class="box">' + html + '</div></div>'; $('mdl').addEventListener('click', function (e) { if (e.target.id === 'mdl') close(); }); return $('mdl'); }
+  function close() { $('mroot').innerHTML = ''; }
+
+  $('lf').addEventListener('submit', function (e) {
+    e.preventDefault(); $('le').textContent = '';
+    post('login', { username: $('lu').value, password: $('lp').value }).then(function (r) { setTok(r.token); $('lp').value = ''; load(); })
+      .catch(function (err) { $('le').textContent = err.message; });
+  });
+  $('outBtn').onclick = function () { post('logout').catch(function () {}); setTok(''); showLogin(); };
+  $('copySignup').onclick = function () { var u = SITE + 'signup.html'; (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { toast('اتنسخ: ' + u); }, function () { prompt('رابط التسجيل', u); }); };
+  $('q').oninput = render;
+
+  function status(t) {
+    if (t.blocked) return '<span class="badge x">متوقف: ' + esc(t.blocked) + '</span>';
+    if (t.status === 'trial' && !t.paid_until) return '<span class="badge y">تجربة لحد ' + day(t.trial_ends_at) + '</span>';
+    if (t.paid_until) return '<span class="badge g">مدفوع لحد ' + day(t.paid_until) + '</span>';
+    return '<span class="badge g">مفعّل</span>';
+  }
+  function load() {
+    $('loginV').classList.add('hidden'); $('appV').classList.remove('hidden');
+    $('list').innerHTML = '<div class="meta">جاري التحميل...</div>';
+    post('list').then(function (d) { DATA = d; render(); }).catch(function (e) { $('list').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+  }
+  function render() {
+    if (!DATA) return;
+    var ts = DATA.tenants, q = $('q').value.trim().toLowerCase();
+    var act = ts.filter(function (t) { return !t.blocked; }).length, trial = ts.filter(function (t) { return !t.blocked && t.status === 'trial' && !t.paid_until; }).length;
+    var paid = ts.reduce(function (s, t) { return s + Number(t.total_paid || 0); }, 0);
+    $('stats').innerHTML = '<div class="stat"><b>' + ts.length + '</b><span>كل المحلات</span></div><div class="stat"><b>' + act + '</b><span>شغالة دلوقتي</span></div>' +
+      '<div class="stat"><b>' + trial + '</b><span>في الفترة التجريبية</span></div><div class="stat"><b>' + (ts.length - act) + '</b><span>متوقفة</span></div><div class="stat"><b>' + money(paid) + '</b><span>إجمالي المدفوع</span></div>';
+    var rows = ts.filter(function (t) { return !q || [t.shop_name, t.owner_email, t.owner_phone, t.code, t.owner_name].join(' ').toLowerCase().indexOf(q) >= 0; });
+    $('list').innerHTML = rows.map(function (t) {
+      var url = SITE + t.code;
+      return '<div class="shop"><h3>' + esc(t.shop_name) + status(t) + '</h3><div class="meta">' +
+        'صاحب المحل: ' + esc(t.owner_name || '—') + ' · <span class="ltr">' + esc(t.owner_email || '—') + '</span> · <span class="ltr">' + esc(t.owner_phone || '') + '</span><br>' +
+        'الرابط: <span class="ltr">' + esc(t.code === 'cakeshop' ? SITE : url) + '</span><br>' +
+        'العملاء: ' + t.customers + ' · الطلبات: ' + t.orders + ' · الاشتراك الشهري: ' + money(t.monthly_price) + ' · المدفوع: ' + money(t.total_paid) + ' (' + t.payments_count + ' دفعة)<br>' +
+        'سجّل يوم ' + day(t.created_at) + (t.notes ? '<br>ملاحظات: ' + esc(t.notes) : '') + '</div>' +
+        '<div class="row"><button class="p" data-a="pay" data-id="' + t.id + '">💵 تسجيل دفعة</button><button data-a="edit" data-id="' + t.id + '">✏️ تعديل الاشتراك</button><button data-a="hist" data-id="' + t.id + '">🧾 المدفوعات</button>' +
+        (t.status === 'suspended' ? '<button data-a="on" data-id="' + t.id + '">تفعيل</button>' : (t.code === 'cakeshop' ? '' : '<button class="r" data-a="off" data-id="' + t.id + '">إيقاف</button>')) + '</div></div>';
+    }).join('') || '<div class="meta">مفيش محلات</div>';
+  }
+  function find(id) { return DATA.tenants.filter(function (t) { return t.id === id; })[0]; }
+  $('list').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-a]'); if (!b) return;
+    var t = find(b.dataset.id), a = b.dataset.a;
+    if (a === 'pay') return payDlg(t);
+    if (a === 'edit') return editDlg(t);
+    if (a === 'hist') return histDlg(t);
+    if (a === 'off' && !confirm('إيقاف ' + t.shop_name + '؟ المحل وعملاؤه مش هيقدروا يستخدموا البرنامج لحد ما تفعّله تاني. (البيانات مش بتتمسح)')) return;
+    post('update', { tenant_id: t.id, status: a === 'off' ? 'suspended' : (t.paid_until ? 'active' : 'trial') }).then(function () { toast('تم'); load(); }).catch(function (e) { alert(e.message); });
+  });
+  function payDlg(t) {
+    var m = modal('<h2>تسجيل دفعة — ' + esc(t.shop_name) + '</h2><div class="meta">الاشتراك هيتمد من آخر تاريخ ساري (أو من النهارده لو منتهي) والمحل هيتفعّل.</div>' +
+      '<div class="grid2"><div><label>المبلغ (ج.م)</label><input id="pa" type="number" min="0" value="' + (Number(t.monthly_price) || '') + '"></div><div><label>عدد الشهور</label><input id="pm" type="number" min="1" max="36" value="1"></div></div>' +
+      '<label>طريقة الدفع</label><select id="pw"><option value="vodafone_cash">فودافون كاش</option><option value="instapay">إنستاباي</option><option value="cash">كاش</option><option value="bank">تحويل بنكي</option><option value="other">أخرى</option></select>' +
+      '<label>رقم العملية / المرجع</label><input id="pr" dir="ltr"><label>ملاحظة</label><input id="pn">' +
+      '<div class="row"><button class="p" id="ps">حفظ الدفعة</button><button id="pc">إلغاء</button></div><div class="err" id="pe"></div>');
+    $('pc').onclick = close;
+    $('ps').onclick = function () {
+      $('ps').disabled = true;
+      post('pay', { tenant_id: t.id, amount: $('pa').value, months: $('pm').value, method: $('pw').value, reference: $('pr').value, note: $('pn').value })
+        .then(function (r) { close(); toast('اتسجلت. الاشتراك ساري لحد ' + day(r.paid_until)); load(); })
+        .catch(function (e) { $('pe').textContent = e.message; $('ps').disabled = false; });
+    };
+  }
+  function editDlg(t) {
+    modal('<h2>تعديل الاشتراك — ' + esc(t.shop_name) + '</h2>' +
+      '<label>الحالة</label><select id="es"><option value="trial">تجربة</option><option value="active">مفعّل</option><option value="suspended">موقوف</option></select>' +
+      '<div class="grid2"><div><label>آخر يوم في التجربة</label><input id="et" type="date" value="' + isoDate(t.trial_ends_at) + '"></div><div><label>مدفوع لحد</label><input id="ep" type="date" value="' + isoDate(t.paid_until) + '"></div></div>' +
+      '<label>الاشتراك الشهري (ج.م)</label><input id="em" type="number" min="0" value="' + Number(t.monthly_price || 0) + '">' +
+      '<label>ملاحظات (ليك انت بس)</label><textarea id="en">' + esc(t.notes) + '</textarea>' +
+      '<div class="meta">«مفعّل» من غير تاريخ دفع = شغال على طول من غير انتهاء.</div>' +
+      '<div class="row"><button class="p" id="esv">حفظ</button><button id="ec">إلغاء</button></div><div class="err" id="ee"></div>');
+    $('es').value = t.status; $('ec').onclick = close;
+    $('esv').onclick = function () {
+      var end = function (v) { return v ? v + 'T23:59:59' : ''; };
+      post('update', { tenant_id: t.id, status: $('es').value, trial_ends_at: end($('et').value), paid_until: end($('ep').value), monthly_price: $('em').value, notes: $('en').value })
+        .then(function () { close(); toast('تم الحفظ'); load(); }).catch(function (e) { $('ee').textContent = e.message; });
+    };
+  }
+  var METHOD = { vodafone_cash: 'فودافون كاش', instapay: 'إنستاباي', cash: 'كاش', bank: 'تحويل بنكي', other: 'أخرى', manual: 'يدوي' };
+  function histDlg(t) {
+    modal('<h2>مدفوعات — ' + esc(t.shop_name) + '</h2><div id="hl" class="meta">جاري التحميل...</div><div class="row"><button id="hc">قفل</button></div>');
+    $('hc').onclick = close;
+    post('payments', { tenant_id: t.id }).then(function (d) {
+      $('hl').innerHTML = d.payments.length ? '<table><tr><th>التاريخ</th><th>المبلغ</th><th>شهور</th><th>الطريقة</th><th>المرجع</th><th>لحد</th></tr>' + d.payments.map(function (p) {
+        return '<tr><td>' + day(p.created_at) + '</td><td>' + money(p.amount) + '</td><td>' + p.months + '</td><td>' + esc(METHOD[p.method] || p.method) + '</td><td class="ltr">' + esc(p.reference) + '</td><td>' + day(p.paid_until_after) + '</td></tr>';
+      }).join('') + '</table>' : 'مفيش مدفوعات لسه';
+    }).catch(function (e) { $('hl').textContent = e.message; });
+  }
+  $('setBtn').onclick = function () {
+    var s = DATA.settings;
+    modal('<h2>إعدادات المنصة</h2>' +
+      '<label>اسم المنصة</label><input id="sn" value="' + esc(s.platform_name) + '">' +
+      '<div class="grid2"><div><label>أيام الفترة التجريبية</label><input id="st" type="number" min="0" max="90" value="' + esc(s.trial_days) + '"></div><div><label>الاشتراك الشهري الافتراضي (ج.م)</label><input id="sm" type="number" min="0" value="' + esc(s.monthly_price) + '"></div></div>' +
+      '<label>التسجيل الذاتي</label><select id="so"><option value="true">مفتوح (أي محل يسجل من الرابط)</option><option value="false">مقفول</option></select>' +
+      '<label>طريقة الدفع اللي بتظهر لصاحب المحل قبل انتهاء اشتراكه</label><textarea id="si" placeholder="مثلاً: حوّل على فودافون كاش 010xxxxxxxx وابعت صورة التحويل واتساب">' + esc(s.payment_instructions) + '</textarea>' +
+      '<div class="row"><button class="p" id="ssv">حفظ</button><button id="sc">إلغاء</button></div><div class="err" id="se"></div>');
+    $('so').value = s.signup_open === 'false' ? 'false' : 'true'; $('sc').onclick = close;
+    $('ssv').onclick = function () {
+      post('saveSettings', { platform_name: $('sn').value, trial_days: $('st').value, monthly_price: $('sm').value, signup_open: $('so').value, payment_instructions: $('si').value })
+        .then(function (d) { DATA.settings = d.settings; close(); toast('تم الحفظ'); }).catch(function (e) { $('se').textContent = e.message; });
+    };
+  };
+  $('pwBtn').onclick = function () {
+    modal('<h2>تغيير كلمة السر</h2><label>الحالية</label><input id="c1" type="password" dir="ltr"><label>الجديدة (10 على الأقل)</label><input id="c2" type="password" dir="ltr">' +
+      '<div class="row"><button class="p" id="csv">تغيير</button><button id="cc">إلغاء</button></div><div class="err" id="ce"></div>');
+    $('cc').onclick = close;
+    $('csv').onclick = function () { post('changePassword', { current: $('c1').value, next: $('c2').value }).then(function () { close(); toast('اتغيرت ✓'); }).catch(function (e) { $('ce').textContent = e.message; }); };
+  };
+  if (TOK) load(); else showLogin();
+})();
+</script>
+</body></html>
