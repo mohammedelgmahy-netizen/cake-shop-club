@@ -184,13 +184,13 @@
     '.co-it .lt{font-family:Inter,Cairo,sans-serif;font-weight:800;font-size:14px;white-space:nowrap}',
     '.co-foot{padding:14px}',
     /* السلة المنبثقة (بتفتح أول ما المنتج يتضاف) */
-    '.cdr .bx{display:flex;flex-direction:column;height:92vh;max-height:92vh;padding:0;overflow:hidden}',
+    '.cdr{align-items:flex-end}.cdr .bx{position:relative;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;height:calc(100% - 16px);max-height:calc(100% - 16px);padding:0;overflow:hidden;animation:none}',
     '.cdr-hd{display:flex;align-items:center;gap:10px;padding:16px 16px 12px;border-bottom:1px solid var(--line)}',
     '.cdr-hd h2{flex:1;margin:0;font-size:19px;font-weight:800;text-align:center}.cdr-hd h2 i{font-style:normal;color:var(--brand2);font-family:Inter,Cairo,sans-serif}',
     '.cdr-hd .x{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--text);font-size:22px;cursor:pointer;flex:0 0 auto}',
     '.cdr-hd .sp{width:38px;flex:0 0 auto}',
     '.cdr-add{margin:0;padding:9px 14px;text-align:center;font-weight:800;font-size:13.5px;color:#A7F3D0;background:linear-gradient(90deg,rgba(94,224,219,.12),rgba(236,91,156,.16))}',
-    '.cdr-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}',
+    '.cdr-body{min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}',
     '.cdr-pr{padding:14px 16px 10px;border-bottom:1px solid var(--line)}',
     '.cdr-pr p{margin:0 0 12px;font-size:13.5px;font-weight:700;text-align:center;line-height:1.6}.cdr-pr p b{color:var(--brand)}.cdr-pr p em{font-style:normal;color:var(--brand2);font-weight:800}',
     '.cdr-bar{position:relative;height:8px;border-radius:99px;background:rgba(255,255,255,.1);margin:0 14px}',
@@ -786,7 +786,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.cdr'), function (x) { x.remove(); });
     var o = document.createElement('div'); o.className = 'osh cdr'; o.dir = 'rtl';
     o.innerHTML = '<div class="bx"><div class="cdr-hd"><span class="sp"></span><h2>🛒 سلة التسوق <i id="cdN"></i></h2><button type="button" class="x" data-x aria-label="قفل">×</button></div>' +
-      (added ? '<p class="cdr-add">✓ تمت إضافة المنتج للسلة</p>' : '') +
+      (added ? '<p class="cdr-add">✓ تمت إضافة المنتج للسلة</p>' : '<span></span>') +
       '<div class="cdr-body" id="cdB"><div class="cl"><div class="sk" style="height:96px"></div><div class="sk" style="height:96px"></div></div></div><div id="cdF"></div></div>';
     document.body.appendChild(o);
     var prevOv = document.body.style.overflow; document.body.style.overflow = 'hidden';
@@ -862,6 +862,7 @@
         btn.onclick = function () { var l = Q.lines[+btn.dataset.del]; cartSet(cartGet().filter(function (x) { return !sameLine(x, l); })); refresh(); };
       });
       o.querySelector('#cdMore').onclick = close;
+      o.querySelector('.bx').scrollTop = 0;
       var go = o.querySelector('#cdGo'); if (go && !bad) go.onclick = function () { close(); nav('#shop/checkout'); };
     }
     refresh();
