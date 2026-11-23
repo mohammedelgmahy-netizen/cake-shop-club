@@ -1216,7 +1216,7 @@ async function tablesAdmin(ctx, token, user, action, p) {
 // ======================= التقارير التفصيلية، الداشبورد، التصدير، النسخ الاحتياطي =======================
 // REPORT_ACTIONS: لصلاحية «لوحة المؤشرات». OWNER_DATA_ACTIONS: لصاحب المحل بس.
 export const REPORT_ACTIONS = ['salesItems', 'dashShop'];
-export const OWNER_DATA_ACTIONS = ['exportData', 'backupInfo', 'backupCreate', 'backupRestore'];
+export const OWNER_DATA_ACTIONS = ['exportData', 'backupInfo', 'backupCreate', 'backupRestore', 'wipeData'];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TZ = 'Africa/Cairo';
 const OPEN_ST = ['pending', 'approved', 'preparing', 'ready', 'shipped', 'served'];
@@ -1484,10 +1484,41 @@ async function backupRestore(sql, user, p) {
   return { dry_run: false, ok: true, ...result };
 }
 
+// ---------- مسح البيانات الموجودة (صاحب المحل): المنتجات والأقسام والترابيزات والعروض والإعدادات والموظفين مش بتتمسح أبداً ----------
+const WIPE_SETS = {
+  orders: { label: 'الطلبات (أونلاين وترابيزات)', sql: [
+    'delete from cakeshop.mc_shop_orders', 'delete from cakeshop.mc_shop_table_help', 'delete from cakeshop.mc_shop_table_sessions',
+    'delete from cakeshop.mc_shop_notifications', 'update cakeshop.mc_shop_stock set reserved = 0, updated_at = now() where reserved <> 0'] },
+  sales: { label: 'المبيعات والفواتير', sql: [
+    'delete from cakeshop.mc_transactions', 'delete from cakeshop.mc_redemptions',
+    'update cakeshop.mc_customers set total_spent = 0, purchases_count = 0, last_purchase_at = null'] },
+  points: { label: 'نقاط العملاء', sql: [
+    'delete from cakeshop.mc_pointsledger', "update cakeshop.mc_customers set points_balance = 0, lifetime_points = 0, tier = coalesce((select tier_id from cakeshop.mc_tiers where active is not false order by min_lifetime_points limit 1), '')"] },
+  customers: { label: 'العملاء', sql: [
+    'delete from cakeshop.mc_pointsledger', 'delete from cakeshop.mc_birthdayrewards', 'delete from cakeshop.mc_whatsappconsent', 'delete from cakeshop.mc_whatsapplog',
+    'delete from cakeshop.mc_shop_addresses', 'delete from cakeshop.mc_shop_customer_notes', 'delete from cakeshop.mc_customers'] },
+  activity: { label: 'سجل العمليات', sql: ['delete from cakeshop.mc_activitylogs'] },
+};
+async function wipeData(sql, user, p) {
+  const sets = (Array.isArray(p.sets) ? p.sets : []).filter((k) => WIPE_SETS[k]);
+  if (!sets.length) throw new Error('اختار البيانات اللي عايز تمسحها');
+  if (T(p.confirm) !== 'مسح') throw new Error('اكتب كلمة «مسح» للتأكيد');
+  await sql.begin(async (tx) => {
+    for (const k of ['orders', 'sales', 'points', 'customers', 'activity']) {
+      if (sets.indexOf(k) < 0) continue;
+      for (const q of WIPE_SETS[k].sql) await tx.unsafe(q);
+    }
+    await tx.unsafe(`insert into cakeshop.mc_backups (kind, created_by, note) values ('wipe', $1, $2)`,
+      [user.name || '', 'مسح: ' + sets.map((k) => WIPE_SETS[k].label).join('، ')]);
+  });
+  return { done: true, sets };
+}
+
 async function ownerData(sql, user, action, p) {
   if (action === 'exportData') return exportData(sql, p);
   if (action === 'backupInfo') return backupInfo(sql);
   if (action === 'backupCreate') return backupCreate(sql, user, p);
   if (action === 'backupRestore') return backupRestore(sql, user, p);
+  if (action === 'wipeData') return wipeData(sql, user, p);
   throw new Error('طلب غير معروف');
 }

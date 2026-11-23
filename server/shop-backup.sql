@@ -1,7 +1,7 @@
 -- Cake Shop — سجل النسخ الاحتياطي والاسترجاع (Backup & Restore). محتوى النسخة نفسه بيتنزل على جهاز صاحب المحل.
 create table if not exists cakeshop.mc_backups (
   id bigserial primary key,
-  kind text not null default 'backup' check (kind in ('backup', 'restore')),
+  kind text not null default 'backup' check (kind in ('backup', 'restore', 'wipe')),
   created_at timestamptz not null default now(),
   created_by text not null default '',
   note text not null default '',
@@ -13,3 +13,4 @@ create table if not exists cakeshop.mc_backups (
 alter table cakeshop.mc_backups enable row level security;
 revoke all on cakeshop.mc_backups from anon, authenticated;
 revoke all on sequence cakeshop.mc_backups_id_seq from anon, authenticated;
+alter table cakeshop.mc_backups drop constraint if exists mc_backups_kind_check; alter table cakeshop.mc_backups add constraint mc_backups_kind_check check (kind in ('backup', 'restore', 'wipe'));
