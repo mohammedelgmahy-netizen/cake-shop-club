@@ -25,8 +25,8 @@ if (__mcRedir) location.replace(location.pathname.slice(0, -1) + location.search
   if (window.MC_SHOP || /\/[a-z][a-z0-9]{2,29}$/.test(location.pathname)) document.getElementById('m').textContent = '';
   var params = {}; new URLSearchParams(location.search).forEach(function(v,k){ params[k]=v; });
   var base = location.href.split('#')[0].split('?')[0];
-  function fail(){ document.getElementById('m').innerHTML = 'تعذر الاتصال. تأكد من الإنترنت ثم <a href="" style="color:#5EE0DB">أعد المحاولة</a>'; }
-  var V = {"Register":"b61a3c2bd2","Card":"26182140ca","Unsub":"64ad0cb250","Message":"0687b5796d","Admin":"74ded79c68","Table":"72cc29eee7"};
+  function fail(e){ var off = navigator.onLine === false || (e && e.name === 'TypeError'); document.getElementById('m').innerHTML = (off ? 'مفيش اتصال بالإنترنت. اتأكد من النت ثم ' : (e && e.name === 'AbortError') ? 'السيرفر اتأخر في الرد. ' : 'السيرفر مش متاح دلوقتي. ') + '<a href="" style="color:#5EE0DB">جرّب تاني</a>'; }
+  var V = {"Register":"b61a3c2bd2","Card":"26182140ca","Unsub":"64ad0cb250","Message":"0687b5796d","Admin":"f2e421096c","Table":"72cc29eee7"};
   var getPage = function(n){ return fetch(base.replace(/[^/]*$/, '') + 'pages/' + n + '.html?v=' + V[n]).then(function(r){ if (!r.ok) throw new Error('page'); return r.text(); }); };
   var guess = params.tb ? 'Table' : params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
   var early = getPage(guess); early.catch(function(){});

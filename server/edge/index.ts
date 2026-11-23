@@ -142,6 +142,22 @@ async function plog(actor: string, action: string, tenantId: string | null, deta
   await sql.unsafe('insert into csplatform.log (actor, action, tenant_id, details) values ($1, $2, $3, $4::jsonb)', [actor, action, tenantId, JSON.stringify(details || {})]);
 }
 
+async function codeFree(code: string): Promise<boolean> {
+  if (!CODE_RE.test(code) || RESERVED.has(code)) return false;
+  const r = await sql.unsafe('select 1 from csplatform.tenants where code = $1', [code]);
+  return !r.length;
+}
+// اسم الرابط: حروف إنجليزي صغيرة وأرقام (3-30) ويبدأ بحرف
+function cleanCode(v: unknown) { return String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^[0-9]+/, '').slice(0, 30); }
+async function suggestCodes(base: string): Promise<string[]> {
+  base = cleanCode(base); if (base.length < 3) base = (base + 'shop').slice(0, 20);
+  base = base.slice(0, 24);
+  const cand = [base, base + 'eg', base + 'cafe', base + 'shop', base + '1', base + '2', base + new Date().getFullYear() % 100, base + (Math.floor(Math.random() * 900) + 100)];
+  const out: string[] = [];
+  for (const c of cand) { if (out.length >= 3) break; if (!out.includes(c) && await codeFree(c)) out.push(c); }
+  return out;
+}
+
 async function makeCode(email: string): Promise<string> {
   let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
   base = base.replace(/^[0-9]+/, '');
@@ -173,7 +189,14 @@ async function signup(p: any, ip: string) {
   const dup = await sql.unsafe('select 1 from csplatform.tenants where lower(owner_email) = $1', [email]);
   if (dup.length) throw new Error('الإيميل ده مسجل بمحل قبل كده. ادخل من رابط محلك');
 
-  const code = await makeCode(email);
+  let code = '';
+  if (p.code) {
+    code = cleanCode(p.code);
+    if (!CODE_RE.test(code)) throw new Error('اسم الرابط لازم يكون 3 حروف إنجليزي أو أكتر ويبدأ بحرف');
+    if (!(await codeFree(code))) throw new Error('اسم الرابط ده محجوز، اختار اسم تاني');
+  } else code = await makeCode(email);
+  const perPoint = p.amount_per_point !== undefined && p.amount_per_point !== '' ? Math.round(Number(p.amount_per_point)) : 0;
+  if (perPoint && !(perPoint >= 1 && perPoint <= 100000)) throw new Error('قيمة النقطة لازم تكون رقم من 1 لـ 100000 جنيه');
   const schema = 't_' + code;
   const trialDays = Math.max(0, Math.min(90, Number(st.trial_days) || 14));
   const price = Number(st.monthly_price) || 0;
@@ -187,7 +210,9 @@ async function signup(p: any, ip: string) {
   });
   const t = rows[0] as Tenant;
   try {
-    await setupTenant(t, { shopName, ownerName, email, phone, pw, base: site + code });
+    let logoUrl = '';
+    if (p.logo) logoUrl = await storeImage(String(p.logo), 'cs-offers', code + '-logo', 'تعذر رفع اللوجو');
+    await setupTenant(t, { shopName, ownerName, email, phone, pw, base: site + code, logoUrl, perPoint });
   } catch (e) {
     // لو حصل أي خطأ: نشيل المحل الجديد بالكامل (لسه متعمل حالاً ومفيهوش بيانات)
     console.error('signup setup failed', e);
@@ -197,10 +222,10 @@ async function signup(p: any, ip: string) {
     throw new Error('تعذر تجهيز المحل، حاول مرة أخرى');
   }
   await plog('signup', 'signup', t.id, { code, email, shop: shopName });
-  return { code, url: site + code, admin_url: site + code + '?p=admin', username: email, trial_ends_at: t.trial_ends_at };
+  return { code, url: site + code, admin_url: site + code + '?p=admin', username: email, trial_ends_at: t.trial_ends_at, shop_name: shopName };
 }
 
-async function setupTenant(t: Tenant, o: { shopName: string; ownerName: string; email: string; phone: string; pw: string; base: string }) {
+async function setupTenant(t: Tenant, o: { shopName: string; ownerName: string; email: string; phone: string; pw: string; base: string; logoUrl?: string; perPoint?: number }) {
   const s = services(t);
   // أول طلب بيجهز النظام (الإعدادات الافتراضية + حساب owner بكلمة سر مؤقتة)
   await s.run({ fn: 'page', args: [{}] });
@@ -228,7 +253,8 @@ async function setupTenant(t: Tenant, o: { shopName: string; ownerName: string; 
     await set('shop_phone', o.phone);
     await set('whatsapp_number', phoneIntl);
     await set('shop_address', '');
-    await set('logo_url', '');
+    await set('logo_url', o.logoUrl || '');
+    if (o.perPoint) await set('amount_per_point', String(o.perPoint));
     await set('public_base_url', o.base);
     await q("update mc_settings set value = replace(replace(replace(value, 'Cake Shop Dessert Cafe', $1), 'كيك شوب ديزرت كافيه', $1), 'Cake Shop', $1) where value like '%Cake Shop%' or value like '%كيك شوب%'", [o.shopName]);
     return null;
@@ -245,6 +271,11 @@ async function platformAuth(token: string) {
 
 async function platform(action: string, p: any, ip: string) {
   if (action === 'signup') return signup(p, ip);
+  if (action === 'checkCode') {
+    const c = cleanCode(p.code);
+    const ok = CODE_RE.test(c) && await codeFree(c);
+    return { code: c, available: ok, suggestions: ok ? [] : await suggestCodes(c || p.shop_name_latin || 'shop') };
+  }
   if (action === 'info') {
     const st = await settingsMap();
     return { platform_name: st.platform_name, signup_open: st.signup_open === 'true', trial_days: Number(st.trial_days) || 14 };
@@ -284,12 +315,15 @@ async function platform(action: string, p: any, ip: string) {
     // أرقام بسيطة عن كل محل (عدد العملاء والطلبات) من غير ما نعرض أي بيانات عملاء
     const out = [];
     for (const t of tenants as any[]) {
-      let customers = 0, orders = 0;
+      let customers = 0, orders = 0, sales30 = 0, value30 = 0, lastAct: unknown = null;
       try {
-        const c = await sql.unsafe(`select (select count(*) from ${t.schema_name}.mc_customers)::int c, (select count(*) from ${t.schema_name}.mc_shop_orders)::int o`);
-        customers = c[0].c; orders = c[0].o;
+        const c = await sql.unsafe(`select (select count(*) from ${t.schema_name}.mc_customers)::int c, (select count(*) from ${t.schema_name}.mc_shop_orders)::int o,
+          (select count(*) from ${t.schema_name}.mc_transactions where status <> 'void' and created_at > now() - interval '30 days')::int s30,
+          (select coalesce(sum(net_amount),0) from ${t.schema_name}.mc_transactions where status <> 'void' and created_at > now() - interval '30 days')::float8 v30,
+          (select max(created_at) from ${t.schema_name}.mc_activitylogs) last_act`);
+        customers = c[0].c; orders = c[0].o; sales30 = c[0].s30; value30 = c[0].v30; lastAct = c[0].last_act;
       } catch { /* ignore */ }
-      out.push({ ...t, signup_ip: undefined, customers, orders, blocked: tenantBlock(t) });
+      out.push({ ...t, signup_ip: undefined, customers, orders, sales30, value30, last_activity: lastAct, blocked: tenantBlock(t) });
     }
     return { tenants: out, settings: await settingsMap(), me: who };
   }
@@ -379,7 +413,7 @@ Deno.serve(async (req: Request) => {
     if (blocked) {
       const msg = blocked + ' لو انت صاحب المحل، تواصل مع إدارة المنصة لتجديد الاشتراك.';
       if (fn === 'page') return json({ result: { page: 'Message', boot: { title: t.shop_name, message: msg }, title: t.shop_name } });
-      return json({ result: { ok: false, error: msg } });
+      return json({ result: { ok: false, error: msg, code: 'SHOP_BLOCKED' } });
     }
     const s = services(t);
     if (fn === 'shop' || fn === 'shopAdmin') {
@@ -389,6 +423,12 @@ Deno.serve(async (req: Request) => {
         const st: any[] = await s.db.transaction((q) => q("select key, value from mc_settings where key in ('shop_name_ar', 'shop_name', 'logo_url')")) as any[];
         const m: Record<string, string> = {}; st.forEach((r) => { m[r.key] = r.value; });
         out.result.data.shop = { name: m.shop_name_ar || m.shop_name || t.shop_name, logo_url: m.logo_url || '' };
+      }
+      // لوحة المؤشرات: العملاء العائدين = اشتروا في آخر 30 يوم وليهم أكتر من فاتورة
+      if (fn === 'shopAdmin' && body.args?.[1] === 'dashShop' && out?.result?.ok && out.result.data) {
+        const r: any[] = await s.db.transaction((q) => q(`select count(*)::int n from (select customer_id from mc_transactions where status <> 'void' and customer_id <> ''
+          group by customer_id having count(*) >= 2 and max(created_at) > now() - interval '30 days') x`)) as any[];
+        out.result.data.returning_30 = r[0] ? r[0].n : 0;
       }
       return json(out);
     }

@@ -167,6 +167,11 @@
           card('', 'العملاء الجدد', fmtNum(c.customers_new), 'آخر ' + c.new_days + ' يوم', canCust ? ['customers', { filter: 'new', back: ['dashboard', 'لوحة المؤشرات'], label: 'العملاء الجدد' }] : null) +
           card('', 'نقاط الولاء الممنوحة', fmtNum(c.points_earned), 'كل الوقت', canLed ? ['ledger', { type: 'EARN', back: ['dashboard', 'لوحة المؤشرات'], label: 'النقاط الممنوحة' }] : null) +
         '</div>' +
+        '<div class="db-k">' +
+          card('', 'العملاء العائدين', fmtNum(s.returning_30 || 0), 'اشتروا تاني آخر 30 يوم', null) +
+          card('', 'نقاط مستبدلة', fmtNum(c.points_used || 0), 'كل الوقت', canLed ? ['ledger', { type: 'REDEEM', back: ['dashboard', 'لوحة المؤشرات'], label: 'النقاط المستبدلة' }] : null) +
+          card('', 'رصيد نقاط عند العملاء', fmtNum(c.points_outstanding || 0), 'لسه ما اتستبدلتش', null) +
+        '</div>' +
         '<div class="db-grid"><div class="card"><h3>أكثر العملاء نشاطاً (آخر 30 يوم)</h3>' + custTable(tops) + '</div></div>' +
         '<div style="margin-top:14px">' + shopQrCard() + '</div>';
       DASH_DAYS = { 'new': c.new_days, inactive: c.inactive_days, loaded: true };

@@ -9,26 +9,60 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#170B14;--card:#24121F;--line:rgba(255,255,255,.10);--text:#F6E9F1;--muted:#C9A9BC;--teal:#5EE0DB;--pink:#EC5B9C;--bad:#FF8FA8}
+:root{--bg:#170B14;--card:#24121F;--line:rgba(255,255,255,.10);--text:#F6E9F1;--muted:#C9A9BC;--teal:#5EE0DB;--pink:#EC5B9C;--bad:#FF8FA8;--good:#7CF0B5}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:Cairo,system-ui,Tahoma,sans-serif}
-.wrap{max-width:460px;margin:0 auto;padding:28px 16px 48px}
+.wrap{max-width:980px;margin:0 auto;padding:28px 16px 48px}
 h1{font-size:26px;margin:8px 0 4px;line-height:1.4}
 .sub{color:var(--muted);margin:0 0 20px;line-height:1.8}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}
+@media (max-width:800px){.grid{grid-template-columns:1fr}.pv{order:-1}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}
 label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
 input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font:inherit;font-size:16px}
 input:focus{outline:none;border-color:var(--teal)}
-button{width:100%;margin-top:20px;padding:14px;border:0;border-radius:12px;background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14;font:inherit;font-weight:800;font-size:17px;cursor:pointer}
-button:disabled{opacity:.6}
+.slug{display:flex;direction:ltr;align-items:stretch;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(255,255,255,.04)}
+.slug span{padding:12px 10px;color:var(--muted);font-size:13px;white-space:nowrap;background:rgba(255,255,255,.04);max-width:55%;overflow:hidden;text-overflow:ellipsis}
+.slug input{border:0;border-radius:0;background:transparent;min-width:0}
+.hintline{font-size:13px;margin-top:6px;min-height:1.4em}
+.hintline.ok{color:var(--good)}.hintline.no{color:var(--bad)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.chips button{width:auto;margin:0;padding:4px 12px;border-radius:999px;background:rgba(94,224,219,.12);color:var(--teal);border:1px solid rgba(94,224,219,.35);font-size:13px;font-weight:700}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){.row2{grid-template-columns:1fr}}
+.logo-pick{display:flex;align-items:center;gap:12px}
+.logo-pick img{width:56px;height:56px;border-radius:14px;object-fit:contain;background:#fff;display:none}
+.logo-pick label.btn{margin:0;display:inline-block;padding:10px 14px;border-radius:12px;border:1px dashed var(--line);cursor:pointer;color:var(--text)}
+button.main{width:100%;margin-top:20px;padding:14px;border:0;border-radius:12px;background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14;font:inherit;font-weight:800;font-size:17px;cursor:pointer}
+button.main:disabled{opacity:.6}
 .err{color:var(--bad);margin-top:12px;font-size:14px;min-height:1em}
-.feat{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 18px}
+.feat{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 18px}
+@media (max-width:640px){.feat{grid-template-columns:1fr 1fr}}
 .feat div{background:rgba(94,224,219,.08);border:1px solid rgba(94,224,219,.25);border-radius:12px;padding:8px 10px;font-size:13px}
-.ok h2{margin:0 0 8px;color:var(--teal)}
-.link{direction:ltr;text-align:left;word-break:break-all;background:rgba(255,255,255,.05);border:1px dashed var(--line);border-radius:10px;padding:10px;margin:6px 0 4px;font-size:14px}
+/* معاينة الكارت */
+.pv h3{margin:0 0 10px;font-size:15px;color:var(--muted);font-weight:600}
+.mcard{border-radius:22px;padding:20px;background:radial-gradient(120% 140% at 100% 0%,rgba(236,91,156,.35),transparent 55%),radial-gradient(120% 140% at 0% 100%,rgba(94,224,219,.28),transparent 55%),#2A1424;border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 50px rgba(0,0,0,.35);min-height:200px;display:flex;flex-direction:column;gap:14px}
+.mtop{display:flex;align-items:center;gap:12px}
+.mlogo{width:52px;height:52px;border-radius:14px;background:#fff;display:grid;place-items:center;overflow:hidden;font-weight:800;color:#2A1424;font-size:22px;flex:none}
+.mlogo img{width:100%;height:100%;object-fit:contain}
+.mname{font-weight:800;font-size:18px;line-height:1.3;word-break:break-word}
+.mmeta{color:var(--muted);font-size:12px}
+.mpts{display:flex;align-items:baseline;gap:8px}.mpts b{font-size:36px;background:linear-gradient(90deg,var(--teal),var(--pink));-webkit-background-clip:text;background-clip:text;color:transparent}
+.mbar{height:8px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}.mbar i{display:block;height:100%;width:45%;background:linear-gradient(90deg,var(--teal),var(--pink))}
+.mrule{font-size:13px;color:var(--text);background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px}
+/* جاهز للانطلاق */
+.ok h2{margin:0 0 6px;color:var(--teal)}
+.ready{display:grid;grid-template-columns:1fr 220px;gap:18px;align-items:start}
+@media (max-width:640px){.ready{grid-template-columns:1fr}}
+.link{direction:ltr;text-align:left;word-break:break-all;background:rgba(255,255,255,.05);border:1px dashed var(--line);border-radius:10px;padding:10px;margin:6px 0 4px;font-size:14px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.link button{flex:none;width:auto;margin:0;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);font:inherit;font-size:12px;cursor:pointer}
 .hint{color:var(--muted);font-size:13px;line-height:1.8}
-a.btn{display:block;text-align:center;text-decoration:none;margin-top:16px;padding:14px;border-radius:12px;background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14;font-weight:800}
-.hidden{display:none}
+.qr{background:#fff;border-radius:16px;padding:10px;text-align:center}
+.qr img{width:100%;display:block}
+a.btn,button.alt{display:block;text-align:center;text-decoration:none;margin-top:12px;padding:13px;border-radius:12px;font-weight:800;font:inherit;font-weight:800;cursor:pointer;width:100%}
+a.btn{background:linear-gradient(90deg,var(--teal),var(--pink));color:#170B14}
+button.alt{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line)}
+.hidden{display:none!important}
 </style>
 </head><body>
 <div class="wrap">
@@ -36,56 +70,173 @@ a.btn{display:block;text-align:center;text-decoration:none;margin-top:16px;paddi
   <p class="sub">برنامج ولاء كامل لمحلك: نقاط وعروض للعملاء، طلبات أونلاين، ترابيزات بالـ QR، كاشير وتقارير. <b id="trial">تجربة مجانية</b>، ومن غير أي تجهيزات.</p>
   <div class="feat"><div>⭐ نقاط ومكافآت</div><div>🛒 طلبات أونلاين</div><div>🍽️ ترابيزات QR</div><div>📊 تقارير ومبيعات</div></div>
 
-  <form class="card" id="f" autocomplete="on">
-    <label for="shop">اسم المحل</label>
-    <input id="shop" required maxlength="60" placeholder="مثلاً: حلواني السعادة">
-    <label for="owner">اسمك</label>
-    <input id="owner" maxlength="60" autocomplete="name">
-    <label for="email">الإيميل (هتدخل بيه لوحة التحكم)</label>
-    <input id="email" type="email" required dir="ltr" autocomplete="email">
-    <label for="phone">رقم الموبايل / واتساب المحل</label>
-    <input id="phone" type="tel" dir="ltr" maxlength="20" autocomplete="tel" placeholder="01xxxxxxxxx">
-    <label for="pw">كلمة السر (8 حروف أو أرقام على الأقل)</label>
-    <input id="pw" type="password" required minlength="8" dir="ltr" autocomplete="new-password">
-    <button id="go" type="submit">إنشاء المحل</button>
-    <div class="err" id="err"></div>
-  </form>
+  <div class="grid" id="formArea">
+    <form class="card" id="f" autocomplete="on" novalidate>
+      <label for="shop">اسم المحل</label>
+      <input id="shop" required maxlength="60" placeholder="مثلاً: حلواني السعادة">
+
+      <label for="code">رابط محلك (حروف إنجليزي وأرقام)</label>
+      <div class="slug"><span id="siteBase"></span><input id="code" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="saada"></div>
+      <div class="hintline" id="codeHint"></div>
+      <div class="chips" id="sugg"></div>
+
+      <label>لوجو المحل (اختياري)</label>
+      <div class="logo-pick"><img id="logoPrev" alt=""><label class="btn" for="logo">📷 اختار صورة</label><input id="logo" type="file" accept="image/*" class="hidden"><button type="button" id="logoClear" class="hidden" style="width:auto;background:none;border:0;color:var(--bad);font:inherit;cursor:pointer">شيل</button></div>
+
+      <div class="row2">
+        <div><label for="ppt">كل كام جنيه = نقطة؟</label><input id="ppt" type="number" min="1" max="100000" inputmode="numeric" value="50"></div>
+        <div><label for="phone">موبايل / واتساب المحل</label><input id="phone" type="tel" dir="ltr" maxlength="20" autocomplete="tel" placeholder="01xxxxxxxxx"></div>
+      </div>
+
+      <label for="owner">اسمك</label>
+      <input id="owner" maxlength="60" autocomplete="name">
+      <label for="email">الإيميل (هتدخل بيه لوحة التحكم)</label>
+      <input id="email" type="email" required dir="ltr" autocomplete="email">
+      <label for="pw">كلمة السر (8 حروف أو أرقام على الأقل)</label>
+      <input id="pw" type="password" required minlength="8" dir="ltr" autocomplete="new-password">
+      <button class="main" id="go" type="submit">إنشاء المحل</button>
+      <div class="err" id="err"></div>
+    </form>
+
+    <div class="pv">
+      <h3>معاينة كارت العميل</h3>
+      <div class="mcard">
+        <div class="mtop"><div class="mlogo" id="pvLogo">?</div><div><div class="mname" id="pvName">اسم محلك</div><div class="mmeta">كارت الولاء · عضوية رقم 100001</div></div></div>
+        <div class="mpts"><b>45</b><span class="mmeta">نقطة</span></div>
+        <div class="mbar"><i></i></div>
+        <div class="mrule" id="pvRule">كل 50 جنيه = نقطة</div>
+      </div>
+      <p class="hint" style="margin-top:10px">ده شكل الكارت اللي العميل هيشوفه على موبايله بعد ما يسجل. تقدر تغير كل حاجة بعدين من الإعدادات.</p>
+    </div>
+  </div>
 
   <div class="card ok hidden" id="ok">
-    <h2>محلك جاهز 🎉</h2>
-    <div class="hint">رابط لوحة التحكم بتاعتك (احفظه):</div>
-    <div class="link" id="adm"></div>
-    <div class="hint">رابط المحل للعملاء (للتسجيل في كارت الولاء والطلب):</div>
-    <div class="link" id="pub"></div>
-    <div class="hint">ادخل بالإيميل <b id="usr" dir="ltr"></b> وكلمة السر اللي اخترتها.</div>
-    <a class="btn" id="goAdm" href="#">ادخل لوحة التحكم</a>
+    <h2>🎉 <span id="okName"></span> جاهز للانطلاق</h2>
+    <div class="ready">
+      <div>
+        <div class="hint">١. رابط تسجيل العملاء (ابعته أو اطبع الـ QR وحطه على الكاشير):</div>
+        <div class="link"><span id="pub"></span><button type="button" data-copy="pub">نسخ</button></div>
+        <div class="hint">٢. رابط لوحة التحكم بتاعتك (احفظه عندك):</div>
+        <div class="link"><span id="adm"></span><button type="button" data-copy="adm">نسخ</button></div>
+        <div class="hint">٣. ادخل بالإيميل <b id="usr" dir="ltr"></b> وكلمة السر اللي اخترتها. الفترة التجريبية لحد <b id="trialEnd"></b>.</div>
+        <a class="btn" id="goAdm" href="#">ادخل لوحة التحكم</a>
+      </div>
+      <div>
+        <div class="qr"><img id="qrImg" alt="QR"></div>
+        <button class="alt" type="button" id="printQr">🖨️ اطبع الـ QR</button>
+        <a class="btn" id="dlQr" download="qr.png" href="#" style="background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line)">⬇️ نزّل الصورة</a>
+      </div>
+    </div>
   </div>
 </div>
+<script src="qr.js"></script>
 <script>
 (function () {
   var FN = "https://lhamdnaxioxqptkylvkg.supabase.co/functions/v1/cakeshop?forceFunctionRegion=ap-south-1";
   var site = location.origin + location.pathname.replace(/[^/]*$/, '');
+  var LOGO = '', codeTouched = false, codeOk = false, tmr = 0, seq = 0;
   function $(id) { return document.getElementById(id); }
   function post(args) {
     return fetch(FN, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ fn: 'platform', args: args }) })
-      .then(function (r) { return r.json(); }).then(function (j) { var r = j && j.result; if (!r) throw new Error('تعذر الاتصال، حاول تاني'); if (!r.ok) throw new Error(r.error); return r.data; });
+      .then(function (r) { if (r.status >= 500) throw new Error('السيرفر مش متاح دلوقتي، جرّب كمان شوية'); return r.json(); },
+            function () { throw new Error('مفيش اتصال بالإنترنت. اتأكد من النت وجرّب تاني'); })
+      .then(function (j) { var r = j && j.result; if (!r) throw new Error('حصل خطأ في السيرفر، حاول تاني'); if (!r.ok) throw new Error(r.error); return r.data; });
   }
+  $('siteBase').textContent = site.replace(/^https?:\/\//, '');
+
+  // ---------- معاينة حية ----------
+  function preview() {
+    var n = $('shop').value.trim() || 'اسم محلك';
+    $('pvName').textContent = n;
+    $('pvLogo').innerHTML = LOGO ? '<img src="' + LOGO + '" alt="">' : '';
+    if (!LOGO) $('pvLogo').textContent = n.charAt(0);
+    var v = Math.max(1, Math.round(Number($('ppt').value) || 50));
+    $('pvRule').textContent = 'كل ' + v + ' جنيه = نقطة';
+  }
+  ['shop', 'ppt'].forEach(function (id) { $(id).addEventListener('input', preview); });
+
+  // ---------- اسم الرابط: فحص لحظي + بدائل ----------
+  function latin(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^[0-9]+/, '').slice(0, 30); }
+  function check() {
+    var c = latin($('code').value);
+    if ($('code').value !== c) $('code').value = c;
+    var my = ++seq; codeOk = false; $('sugg').innerHTML = '';
+    if (!c) { $('codeHint').className = 'hintline'; $('codeHint').textContent = ''; return; }
+    if (c.length < 3) { $('codeHint').className = 'hintline no'; $('codeHint').textContent = '3 حروف على الأقل'; return; }
+    $('codeHint').className = 'hintline'; $('codeHint').textContent = 'بنشوف لو متاح...';
+    post(['checkCode', { code: c, shop_name_latin: latin($('email').value.split('@')[0]) }]).then(function (r) {
+      if (my !== seq) return;
+      codeOk = r.available;
+      $('codeHint').className = 'hintline ' + (r.available ? 'ok' : 'no');
+      $('codeHint').textContent = r.available ? '✓ متاح: ' + site + r.code : '✗ الاسم ده محجوز، جرّب واحد من دول:';
+      $('sugg').innerHTML = (r.suggestions || []).map(function (s) { return '<button type="button" data-s="' + s + '">' + s + '</button>'; }).join('');
+    }).catch(function (e) { if (my === seq) { $('codeHint').className = 'hintline no'; $('codeHint').textContent = e.message; } });
+  }
+  $('code').addEventListener('input', function () { codeTouched = true; clearTimeout(tmr); tmr = setTimeout(check, 400); });
+  $('email').addEventListener('input', function () {
+    if (codeTouched) return;
+    var c = latin($('email').value.split('@')[0]); if (c.length >= 3) { $('code').value = c; clearTimeout(tmr); tmr = setTimeout(check, 500); }
+  });
+  $('sugg').addEventListener('click', function (e) { var b = e.target.closest('button[data-s]'); if (!b) return; $('code').value = b.dataset.s; codeTouched = true; check(); });
+
+  // ---------- اللوجو: بيتصغر على الموبايل قبل الرفع ----------
+  $('logo').addEventListener('change', function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var img = new Image(), url = URL.createObjectURL(f);
+    img.onload = function () {
+      var m = 512, s = Math.min(1, m / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      LOGO = c.toDataURL('image/png'); if (LOGO.length > 2500000) LOGO = c.toDataURL('image/jpeg', .85);
+      URL.revokeObjectURL(url);
+      $('logoPrev').src = LOGO; $('logoPrev').style.display = 'block'; $('logoClear').classList.remove('hidden'); preview();
+    };
+    img.onerror = function () { $('err').textContent = 'الصورة دي مش مدعومة، جرّب صورة PNG أو JPG'; };
+    img.src = url;
+  });
+  $('logoClear').onclick = function () { LOGO = ''; $('logo').value = ''; $('logoPrev').style.display = 'none'; this.classList.add('hidden'); preview(); };
+
   post(['info', {}]).then(function (i) {
     if (i.platform_name) document.title = 'سجّل محلك — ' + i.platform_name;
-    $('trial').textContent = 'تجربة مجانية ' + i.trial_days + ' يوم';
+    $('trial').textContent = 'تجربة مجانية ' + i.trial_days + ' أيام';
     if (!i.signup_open) { $('f').innerHTML = '<div class="hint">التسجيل مقفول حالياً. تواصل معنا عشان نفتحلك حساب.</div>'; }
   }).catch(function () {});
+
+  // ---------- إنشاء المحل ----------
   $('f').addEventListener('submit', function (e) {
     e.preventDefault();
-    $('err').textContent = ''; $('go').disabled = true; $('go').textContent = 'بنجهز محلك...';
-    post(['signup', { shop_name: $('shop').value, owner_name: $('owner').value, email: $('email').value, phone: $('phone').value, password: $('pw').value, site: site }])
+    var err = function (m) { $('err').textContent = m; };
+    if ($('shop').value.trim().length < 2) return err('اكتب اسم المحل');
+    if ($('code').value && !codeOk) return err('اختار رابط متاح للمحل (أو سيبه فاضي ونختارلك واحد)');
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test($('email').value.trim())) return err('الإيميل مش صحيح');
+    if ($('pw').value.length < 8) return err('كلمة السر لازم 8 حروف أو أرقام على الأقل');
+    err(''); $('go').disabled = true; $('go').textContent = 'بنجهز محلك...';
+    post(['signup', { shop_name: $('shop').value, owner_name: $('owner').value, email: $('email').value, phone: $('phone').value, password: $('pw').value,
+      code: $('code').value, amount_per_point: $('ppt').value, logo: LOGO, site: site }])
       .then(function (r) {
-        $('f').classList.add('hidden'); $('ok').classList.remove('hidden');
-        $('adm').textContent = r.admin_url; $('pub').textContent = r.url; $('usr').textContent = r.username; $('goAdm').href = r.admin_url;
+        $('formArea').classList.add('hidden'); $('ok').classList.remove('hidden'); window.scrollTo(0, 0);
+        $('okName').textContent = r.shop_name || ''; $('adm').textContent = r.admin_url; $('pub').textContent = r.url; $('usr').textContent = r.username; $('goAdm').href = r.admin_url;
+        try { $('trialEnd').textContent = new Date(r.trial_ends_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' }); } catch (x) {}
+        try {
+          var cv = window.mcQRPng(r.url, { size: 900, title: r.shop_name || '', sub: 'امسح الكود وسجّل في كارت الولاء' });
+          var src = cv.toDataURL ? cv.toDataURL('image/png') : String(cv);
+          $('qrImg').src = src; $('dlQr').href = src; $('dlQr').download = 'qr-' + r.code + '.png';
+        } catch (x) { $('qrImg').alt = 'تعذر إنشاء الـ QR'; }
       })
-      .catch(function (err) { $('err').textContent = err.message || 'حصل خطأ، حاول تاني'; })
+      .catch(function (e2) { err(e2.message || 'حصل خطأ، حاول تاني'); })
       .then(function () { $('go').disabled = false; $('go').textContent = 'إنشاء المحل'; });
   });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-copy]'); if (!b) return;
+    var t = $(b.dataset.copy).textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = '✓'; setTimeout(function () { b.textContent = 'نسخ'; }, 1500); }, function () { prompt('انسخ الرابط', t); });
+  });
+  $('printQr').onclick = function () {
+    var w = window.open('', '_blank'); if (!w) return;
+    w.document.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>QR</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}img{width:80vmin;max-width:520px}</style></head><body><img src="' + $('qrImg').src + '" onload="setTimeout(function(){window.print()},200)"></body></html>');
+    w.document.close();
+  };
+  preview();
 })();
 </script>
 </body></html>

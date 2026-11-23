@@ -131,9 +131,10 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;borde
       return '<div class="shop"><h3>' + esc(t.shop_name) + status(t) + '</h3><div class="meta">' +
         'صاحب المحل: ' + esc(t.owner_name || '—') + ' · <span class="ltr">' + esc(t.owner_email || '—') + '</span> · <span class="ltr">' + esc(t.owner_phone || '') + '</span><br>' +
         'الرابط: <span class="ltr">' + esc(t.code === 'cakeshop' ? SITE : url) + '</span><br>' +
-        'العملاء: ' + t.customers + ' · الطلبات: ' + t.orders + ' · الاشتراك الشهري: ' + money(t.monthly_price) + ' · المدفوع: ' + money(t.total_paid) + ' (' + t.payments_count + ' دفعة)<br>' +
+        'العملاء: ' + t.customers + ' · الطلبات: ' + t.orders + ' · فواتير آخر 30 يوم: ' + (t.sales30 || 0) + ' بقيمة ' + money(t.value30) + '<br>' +
+        'آخر نشاط: ' + (t.last_activity ? day(t.last_activity) : 'مفيش لسه') + ' · الاشتراك الشهري: ' + money(t.monthly_price) + ' · المدفوع: ' + money(t.total_paid) + ' (' + t.payments_count + ' دفعة)<br>' +
         'سجّل يوم ' + day(t.created_at) + (t.notes ? '<br>ملاحظات: ' + esc(t.notes) : '') + '</div>' +
-        '<div class="row"><button class="p" data-a="pay" data-id="' + t.id + '">💵 تسجيل دفعة</button><button data-a="edit" data-id="' + t.id + '">✏️ تعديل الاشتراك</button><button data-a="hist" data-id="' + t.id + '">🧾 المدفوعات</button>' +
+        '<div class="row"><button class="p" data-a="pay" data-id="' + t.id + '">💵 تسجيل دفعة</button><button data-a="edit" data-id="' + t.id + '">✏️ تعديل الاشتراك</button><button data-a="hist" data-id="' + t.id + '">🧾 المدفوعات</button>' + (t.code === 'cakeshop' ? '' : '<button data-a="ext" data-id="' + t.id + '">⏳ مد التجربة</button>') +
         (t.status === 'suspended' ? '<button data-a="on" data-id="' + t.id + '">تفعيل</button>' : (t.code === 'cakeshop' ? '' : '<button class="r" data-a="off" data-id="' + t.id + '">إيقاف</button>')) + '</div></div>';
     }).join('') || '<div class="meta">مفيش محلات</div>';
   }
@@ -144,6 +145,12 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;borde
     if (a === 'pay') return payDlg(t);
     if (a === 'edit') return editDlg(t);
     if (a === 'hist') return histDlg(t);
+    if (a === 'ext') {
+      var n = prompt('تمد التجربة كام يوم من النهارده؟', '5'); if (n === null) return;
+      n = Math.max(1, Math.min(90, parseInt(n, 10) || 0)); if (!n) return;
+      var dd = new Date(Date.now() + n * 864e5);
+      return post('update', { tenant_id: t.id, status: 'trial', trial_ends_at: dd.toISOString() }).then(function () { toast('التجربة اتمدت لحد ' + day(dd.toISOString())); load(); }).catch(function (e) { alert(e.message); });
+    }
     if (a === 'off' && !confirm('إيقاف ' + t.shop_name + '؟ المحل وعملاؤه مش هيقدروا يستخدموا البرنامج لحد ما تفعّله تاني. (البيانات مش بتتمسح)')) return;
     post('update', { tenant_id: t.id, status: a === 'off' ? 'suspended' : (t.paid_until ? 'active' : 'trial') }).then(function () { toast('تم'); load(); }).catch(function (e) { alert(e.message); });
   });
