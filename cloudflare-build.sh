@@ -8,7 +8,7 @@ set -e
 OUT=dist
 rm -rf "$OUT" && mkdir -p "$OUT"
 for f in *; do
-  case "$f" in "$OUT"|node_modules|server|tools|database|*.md|*.sql|*.txt|cloudflare-build.sh|protect.mjs|wrangler.toml|package.json|package-lock.json) continue ;; esac
+  case "$f" in "$OUT"|node_modules|server|tools|database|*.md|*.sql|*.txt|cloudflare-build.sh|404.html|protect.mjs|wrangler.toml|package.json|package-lock.json) continue ;; esac
   cp -R "$f" "$OUT/"
 done
 FILES=$(find "$OUT" -name '*.html')

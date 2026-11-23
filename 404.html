@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>...</title>
+<script>
+// GitHub Pages فقط: رابط المحل (/<code>) مش ملف حقيقي، فبنرجعه للصفحة الرئيسية ومعاه اسم المحل
+// (على Cloudflare الملف ده مش بيتنشر، لأن Cloudflare بيفتح الصفحة الرئيسية لوحده)
+(function(){
+  var m = location.pathname.match(/^(.*\/)([a-z][a-z0-9]{2,29})\/?$/);
+  if (m) location.replace(m[1] + '?__shop=' + m[2] + (location.search ? '&' + location.search.slice(1) : '') + location.hash);
+  else document.addEventListener('DOMContentLoaded', function(){ document.body.textContent = 'الصفحة غير موجودة'; });
+})();
+</script></head><body style="font-family:Tahoma,Arial,sans-serif;text-align:center;padding:40px;background:#170B14;color:#fff"></body></html>

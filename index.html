@@ -17,6 +17,7 @@
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window.__mcInstallPrompt = e; });
+(function(){var q=location.search.match(/[?&]__shop=([a-z][a-z0-9]{2,29})(?:&|$)/);if(!q)return;var rest=location.search.slice(1).split('&').filter(function(x){return x.indexOf('__shop=')!==0;}).join('&');try{history.replaceState(null,'',location.pathname.replace(/[^/]*$/,'')+q[1]+(rest?'?'+rest:'')+location.hash);}catch(e){}})();
 var __mcRedir = /\/[a-z][a-z0-9]{2,29}\/$/.test(location.pathname);
 if (__mcRedir) location.replace(location.pathname.slice(0, -1) + location.search + location.hash);
 (function(){
