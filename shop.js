@@ -649,7 +649,7 @@
       if (S.qty > av) return err('الكمية المتاحة ' + av + ' بس');
       var it = { product_id: p.id, color: S.color, variant: S.variant, qty: S.qty };
       close();
-      if (mode === 'cart') { cartAdd(it); toast('✓ تمت إضافة المنتج للسلة', 'عرض السلة', function () { cartDrawer(false); }); }
+      if (mode === 'cart') { cartAdd(it); cartDrawer(true); }
       else { BUY = it; WITH_CART = false; nav('#shop/checkout/now'); }
     }
     draw();
