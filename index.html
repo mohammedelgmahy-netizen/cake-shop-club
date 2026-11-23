@@ -16,6 +16,75 @@
 </head><body><div class="l"><div><div class="s"></div><div id="m">Cake Shop Dessert Cafe</div></div></div>
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+/* زرار «تحديث» + سحب الشاشة لتحت: يجيب آخر نسخة من الموقع (من غير أي نسخة قديمة محفوظة). */
+window.__csRefreshApp = function(){
+  if (window.__csRefreshing) return; window.__csRefreshing = 1;
+  try { document.querySelectorAll('.cs-rf').forEach(function(b){ b.classList.add('spin'); }); } catch(e){}
+  var go = function(){ location.reload(); };
+  var jobs = [];
+  try { if (window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })); } catch(e){}
+  try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistration().then(function(r){ return r && r.update(); })); } catch(e){}
+  try { jobs.push(fetch('index.html', { cache: 'reload' })); } catch(e){}
+  Promise.race([Promise.all(jobs.map(function(p){ return Promise.resolve(p).catch(function(){}); })), new Promise(function(r){ setTimeout(r, 2500); })]).then(go, go);
+};
+window.__csRefreshUI = function(){
+  var d = document, IC = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>';
+  if (!d.body || d.getElementById('csRfCss')) return;
+  var st = d.createElement('style'); st.id = 'csRfCss';
+  st.textContent = 'html{overscroll-behavior-y:contain}'
+    + '.cs-rf{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#5EE0DB;cursor:pointer;padding:0;flex:0 0 auto;-webkit-tap-highlight-color:transparent}'
+    + '.cs-rf:active{transform:scale(.92)}.cs-rf.spin svg,#csPtr.go svg{animation:csRfSpin .8s linear infinite}@keyframes csRfSpin{to{transform:rotate(360deg)}}'
+    + '#csRfFloat{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;z-index:35;background:rgba(36,18,31,.82);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 6px 18px -6px rgba(0,0,0,.6)}'
+    + '.cs-rf-in{width:36px;height:36px;border-radius:10px}.topbar .cs-rf{border-color:rgba(255,255,255,.2)}'
+    + '#csPtr{position:fixed;top:env(safe-area-inset-top);left:50%;z-index:100001;width:42px;height:42px;margin-left:-21px;border-radius:50%;display:grid;place-items:center;background:#24121F;color:#5EE0DB;border:1px solid rgba(94,224,219,.35);box-shadow:0 8px 22px -6px rgba(0,0,0,.7);transform:translateY(-60px);opacity:0;pointer-events:none}'
+    + '#csPtr.ok{background:#5EE0DB;color:#170B14}#csPtr.back{transition:transform .25s,opacity .25s}'
+    + '@media print{.cs-rf,#csPtr{display:none!important}}';
+  d.head.appendChild(st);
+  var mk = function(id, cls){ var b = d.createElement('button'); b.type = 'button'; b.className = 'cs-rf' + (cls ? ' ' + cls : ''); if (id) b.id = id; b.title = 'تحديث'; b.setAttribute('aria-label', 'تحديث الموقع'); b.innerHTML = IC; b.onclick = function(e){ e.preventDefault(); window.__csRefreshApp(); }; return b; };
+  /* مكان الزرار: جوه الشريط اللي فوق لو موجود (المتجر / لوحة التحكم)، وإلا زرار عائم فوق على الشمال */
+  var place = function(){
+    var bar = d.querySelector('.sh-bar'), top = d.querySelector('.topbar');
+    if (bar && !bar.querySelector('.cs-rf')) { var b = mk('', 'cs-rf-in'); var t = bar.querySelector('.sh-title'); bar.insertBefore(b, t ? t.nextSibling : null); }
+    if (top && !top.querySelector('.cs-rf')) { var w = top.querySelector('.who'); var b2 = mk('', 'cs-rf-in'); if (w) { var g = d.createElement('div'); g.style.cssText = 'display:flex;align-items:center;gap:10px'; top.insertBefore(g, w); g.appendChild(w); g.appendChild(b2); } else top.appendChild(b2); }
+    var inBar = (bar && bar.offsetParent !== null) || (top && top.offsetParent !== null);
+    var f = d.getElementById('csRfFloat');
+    if (inBar) { if (f) f.remove(); } else if (!f) d.body.appendChild(mk('csRfFloat'));
+  };
+  place();
+  var tm = 0; try { new MutationObserver(function(){ clearTimeout(tm); tm = setTimeout(place, 60); }).observe(d.body, { childList: true, subtree: true }); } catch(e){}
+  /* سحب لتحت من أول الصفحة */
+  var ptr = d.createElement('div'); ptr.id = 'csPtr'; ptr.innerHTML = IC; d.body.appendChild(ptr);
+  var sy = 0, sx = 0, on = false, dy = 0, TH = 75;
+  var blocked = function(el){
+    for (; el && el !== d.body && el !== d.documentElement; el = el.parentElement) {
+      var cs = getComputedStyle(el);
+      if (cs.position === 'fixed') return true;                                  // شاشة منبثقة / السلة / قائمة
+      if (el.scrollTop > 0 && /(auto|scroll)/.test(cs.overflowY)) return true;     // جزء بيتمرر جوه الصفحة
+    }
+    return false;
+  };
+  var show = function(y){ var p = Math.min(y * 0.5, 90); ptr.style.transform = 'translateY(' + (p - 50) + 'px) rotate(' + (y * 2) + 'deg)'; ptr.style.opacity = Math.min(1, y / 60); ptr.classList.toggle('ok', y >= TH); };
+  d.addEventListener('touchstart', function(e){
+    on = false; dy = 0;
+    if (window.__csRefreshing || e.touches.length !== 1 || (window.scrollY || d.documentElement.scrollTop) > 0 || blocked(e.target)) return;
+    var a = d.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+    sy = e.touches[0].clientY; sx = e.touches[0].clientX; on = true; ptr.classList.remove('back', 'ok');
+  }, { passive: true });
+  d.addEventListener('touchmove', function(e){
+    if (!on) return;
+    var y = e.touches[0].clientY - sy, x = Math.abs(e.touches[0].clientX - sx);
+    if ((window.scrollY || d.documentElement.scrollTop) > 0 || (dy === 0 && x > Math.abs(y)) || y < 0) { if (dy > 0) { dy = 0; ptr.classList.add('back'); ptr.style.transform = 'translateY(-60px)'; ptr.style.opacity = 0; } if (x > Math.abs(y) || y < -10) on = false; return; }
+    dy = y; show(dy);
+  }, { passive: true });
+  var end = function(){
+    if (!on) return; on = false;
+    ptr.classList.add('back');
+    if (dy >= TH) { ptr.classList.add('go', 'ok'); ptr.style.transform = 'translateY(18px)'; ptr.style.opacity = 1; window.__csRefreshApp(); }
+    else { ptr.style.transform = 'translateY(-60px)'; ptr.style.opacity = 0; }
+    dy = 0;
+  };
+  d.addEventListener('touchend', end, { passive: true }); d.addEventListener('touchcancel', end, { passive: true });
+};
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window.__mcInstallPrompt = e; });
 (function(){var q=location.search.match(/[?&]__shop=([a-z][a-z0-9]{2,29})(?:&|$)/);if(!q)return;var rest=location.search.slice(1).split('&').filter(function(x){return x.indexOf('__shop=')!==0;}).join('&');try{history.replaceState(null,'',location.pathname.replace(/[^/]*$/,'')+q[1]+(rest?'?'+rest:'')+location.hash);}catch(e){}})();
 var __mcRedir = /\/[a-z][a-z0-9]{2,29}\/$/.test(location.pathname);
@@ -41,13 +110,13 @@ if (__mcRedir) location.replace(location.pathname.slice(0, -1) + location.search
   return send('text/plain;charset=UTF-8').catch(function(e){ if (e && e.name === 'AbortError') throw e; window.__mcJson = true; return send('application/json'); });
 };
   // QR الترابيزة: منيو الطلب من الترابيزة مباشرة
-  if (params.tb) { window.__MC_BOOT__ = { tb: params.tb }; early.then(function(html){ document.open(); document.write(html); document.close(); document.title = 'Cake Shop Dessert Cafe'; }).catch(fail); return; }
+  if (params.tb) { window.__MC_BOOT__ = { tb: params.tb }; early.then(function(html){ document.open(); document.write(html); document.close(); try { window.__csRefreshUI(); } catch(e){} document.title = 'Cake Shop Dessert Cafe'; }).catch(fail); return; }
   window.__mcPost(JSON.stringify({ fn: 'page', args: [params] }))
     .then(function(j){
       if (!j.result) return fail();
       window.__MC_BOOT__ = j.result.boot || {};
       return (j.result.page === guess ? early : getPage(j.result.page)).then(function(html){
-        document.open(); document.write(html); document.close();
+        document.open(); document.write(html); document.close(); try { window.__csRefreshUI(); } catch(e){}
         document.title = j.result.title || 'Cake Shop Dessert Cafe';
       });
     }).catch(fail);
