@@ -27,9 +27,9 @@ if (__mcRedir) location.replace(location.pathname.slice(0, -1) + location.search
   var params = {}; new URLSearchParams(location.search).forEach(function(v,k){ params[k]=v; });
   var base = location.href.split('#')[0].split('?')[0];
   function fail(e){ var off = navigator.onLine === false || (e && e.name === 'TypeError'); document.getElementById('m').innerHTML = (off ? 'مفيش اتصال بالإنترنت. اتأكد من النت ثم ' : (e && e.name === 'AbortError') ? 'السيرفر اتأخر في الرد. ' : 'السيرفر مش متاح دلوقتي. ') + '<a href="" style="color:#5EE0DB">جرّب تاني</a>'; }
-  var V = {"Register":"b61a3c2bd2","Card":"7af2dcf5c6","Unsub":"64ad0cb250","Message":"0687b5796d","Admin":"f2e421096c","Table":"72cc29eee7"};
+  var V = {"Register":"fd38378154","Card":"7af2dcf5c6","Unsub":"64ad0cb250","Message":"0687b5796d","Admin":"f2e421096c","Table":"b767900f85"};
   var getPage = function(n){ return fetch(base.replace(/[^/]*$/, '') + 'pages/' + n + '.html?v=' + V[n]).then(function(r){ if (!r.ok) throw new Error('page'); return r.text(); }); };
-  var guess = params.tb ? 'Table' : params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
+  var guess = (params.tb || params.menu) ? 'Table' : params.p === 'admin' ? 'Admin' : params.p === 'unsub' ? 'Unsub' : params.t ? 'Card' : 'Register';
   var early = getPage(guess); early.catch(function(){});
   window.MC_FUNCTION_URL = FN;
 /* منصة متعددة المحلات: رابط المحل /<code> → كل الطلبات تروح لخزنة المحل ده بس، وتخزين المتصفح منفصل لكل محل */
@@ -41,6 +41,8 @@ if (__mcRedir) location.replace(location.pathname.slice(0, -1) + location.search
   return send('text/plain;charset=UTF-8').catch(function(e){ if (e && e.name === 'AbortError') throw e; window.__mcJson = true; return send('application/json'); });
 };
   // QR الترابيزة: منيو الطلب من الترابيزة مباشرة
+  // QR المحل للزبون العابر: المنيو من غير تسجيل اسم أو رقم
+  if (params.menu && !params.tb) { window.__MC_BOOT__ = { menu: 1 }; early.then(function(html){ document.open(); document.write(html); document.close(); document.title = 'Cake Shop Dessert Cafe'; }).catch(fail); return; }
   if (params.tb) { window.__MC_BOOT__ = { tb: params.tb }; early.then(function(html){ document.open(); document.write(html); document.close(); document.title = 'Cake Shop Dessert Cafe'; }).catch(fail); return; }
   window.__mcPost(JSON.stringify({ fn: 'page', args: [params] }))
     .then(function(j){

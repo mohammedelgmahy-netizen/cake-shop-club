@@ -90,6 +90,7 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
   var BOOT = window.__MC_BOOT__ || {};
   var KEY = String(BOOT.tb || new URLSearchParams(location.search).get('tb') || '').toLowerCase();
   var app = document.getElementById('app'), bar = document.getElementById('bar'), barBtn = document.getElementById('barBtn');
+  var MENU = !KEY && !!BOOT.menu; // QR المحل: زبون عابر يتفرج على المنيو من غير تسجيل
   var D = null, VIEW = 'home', CAT = '', CART = [], Q = null, LASTST = {}, NOTES = '';
   function tLogo() { var sh = (D && D.shop) || {}; if (!window.MC_SHOP) return 'logo-wide.png'; return sh.logo_url || window.mcTextLogo(sh.name || ''); }
   var ST = { pending: 'تم استلام طلبك', approved: 'تم تأكيد الطلب', preparing: 'جاري تجهيز طلبك', ready: 'طلبك جاهز', served: 'تم تقديم طلبك', completed: 'مكتمل', cancelled: 'ملغي' };
@@ -117,11 +118,11 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
   function stockOf(p, c, v) { if (!p.track_stock || !p.stock) return Infinity; return Number(p.stock[(c || '') + '|' + (v || '')] || 0); }
 
   function head() {
-    return '<div class="hd"><img src="' + tLogo() + '" alt=""><span class="tbl">🍽️ ' + esc(D.table.name) + '</span></div>';
+    return '<div class="hd"><img src="' + tLogo() + '" alt=""><span class="tbl">' + (MENU ? '📖 ' : '🍽️ ') + esc(D.table.name) + '</span></div>';
   }
   function paintBar() {
     var n = cartCount();
-    if (VIEW === 'cart' || !n) { bar.classList.add('hidden'); return; }
+    if (MENU || VIEW === 'cart' || !n) { bar.classList.add('hidden'); return; }
     bar.classList.remove('hidden');
     barBtn.textContent = '🛒 السلة (' + n + ') · راجع وأرسل الطلب';
     barBtn.onclick = function () { go('cart'); };
@@ -142,7 +143,17 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
         '<div class="small"><b>' + money(o.total) + '</b></div></div>';
     }).join('') + '<div class="sum"><div class="r fin"><span>إجمالي طلبات الترابيزة</span><span>' + money(tot) + '</span></div></div></div>';
   }
+  function renderGuestHome() {
+    var reg = location.pathname;
+    app.innerHTML = head() +
+      '<div class="card center"><div style="font-size:15px">أهلاً بيك في <b>Cake Shop Dessert Cafe</b> 🍩</div><div class="muted small">اتفرج على المنيو والأسعار واطلب اللي يعجبك من الكاشير. مش محتاج تسجل اسم أو رقم.</div></div>' +
+      '<button class="btn big" type="button" id="goMenu">📖 تصفح المنيو</button><div style="height:12px"></div>' +
+      '<div class="card center"><div class="small muted">عاوز تجمع نقاط وتاخد خصومات؟ التسجيل اختياري ومجاني.</div><div style="height:8px"></div>' +
+      '<a class="btn ghost" style="text-decoration:none" href="' + esc(reg) + '">💳 سجّل في برنامج الولاء أو افتح كارتك</a></div>';
+    document.getElementById('goMenu').onclick = function () { go('menu'); };
+  }
   function renderHome() {
+    if (MENU) return renderGuestHome();
     var offers = D.offers || [];
     app.innerHTML = head() +
       '<div class="card center"><div style="font-size:15px">أهلاً بيك في <b>Cake Shop Dessert Cafe</b> 🍩</div><div class="muted small">إنت قاعد على <b>' + esc(D.table.name) + '</b>. اطلب من المنيو والطلب هيوصلك على الترابيزة.</div>' +
@@ -207,11 +218,12 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
           var out = p.track_stock && stockOf(p, sel.c, v) <= 0 && (sel.c || !colors.length);
           return '<button type="button" class="opt' + (sel.v === v ? ' on' : '') + '" data-var="' + esc(v) + '"' + (out ? ' disabled' : '') + '>' + esc(v) + '</button>';
         }).join('') + '</div>' : '') +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0"><span style="font-weight:700">الكمية</span><span class="qty"><button type="button" id="qm">−</button><b>' + sel.q + '</b><button type="button" id="qp">+</button></span></div>' +
+        (MENU ? '<div class="small muted center" style="margin:12px 0 4px">' + (p.available ? '🧾 اطلبه من الكاشير' : 'غير متوفر حالياً') + '</div>' : '<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0"><span style="font-weight:700">الكمية</span><span class="qty"><button type="button" id="qm">−</button><b>' + sel.q + '</b><button type="button" id="qp">+</button></span></div>' +
         (p.track_stock && isFinite(av) && (sel.c || !colors.length) && (sel.v || !variants.length) ? '<div class="small muted">المتاح: ' + av + '</div>' : '') +
-        '<div id="pse"></div><button class="btn" type="button" id="add"' + (p.available ? '' : ' disabled') + '>' + (p.available ? '🛒 أضف إلى السلة' : 'غير متوفر حالياً') + '</button>';
+        '<div id="pse"></div><button class="btn" type="button" id="add"' + (p.available ? '' : ' disabled') + '>' + (p.available ? '🛒 أضف إلى السلة' : 'غير متوفر حالياً') + '</button>');
       Array.prototype.forEach.call(s.el.querySelectorAll('[data-col]'), function (b) { b.onclick = function () { sel.c = b.dataset.col; draw(); }; });
       Array.prototype.forEach.call(s.el.querySelectorAll('[data-var]'), function (b) { b.onclick = function () { sel.v = b.dataset.var; draw(); }; });
+      if (MENU) return;
       s.el.querySelector('#qm').onclick = function () { if (sel.q > 1) { sel.q--; draw(); } };
       s.el.querySelector('#qp').onclick = function () { if (sel.q < 99) { sel.q++; draw(); } };
       s.el.querySelector('#add').onclick = function () {
@@ -301,6 +313,13 @@ textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line
     }).catch(function () { });
   }
 
+  if (MENU) {
+    rpc('catalog').then(function (c) {
+      D = { catalog: c, table: { name: 'المنيو' }, orders: [], help: [], offers: [], me: null, session: null };
+      document.title = (window.MC_SHOP ? '' : 'Cake Shop') + ' · المنيو'; render();
+    }).catch(function (e) { app.innerHTML = '<div class="hd"><img src="' + tLogo() + '" alt=""></div><div class="err">' + esc(e.message) + '</div><button class="btn ghost" type="button" onclick="location.reload()">إعادة المحاولة</button>'; });
+    return;
+  }
   if (!KEY) { app.innerHTML = '<div class="err">امسح الـ QR اللي على الترابيزة علشان تفتح المنيو.</div>'; return; }
   rpc('tableBoot').then(function (d) {
     D = d; if (d.shop && d.shop.name) window.MC_SHOP_NAME = d.shop.name; track(d.orders, true); document.title = (window.MC_SHOP ? ((d.shop && d.shop.name) || '') : 'Cake Shop') + ' · ' + d.table.name; render();
